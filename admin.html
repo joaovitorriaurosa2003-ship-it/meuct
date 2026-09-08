@@ -11,6 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 :root{
   --navy: #0A1F35;
@@ -237,6 +238,67 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 }
 
 
+
+/* ---------- Painel comparativo (gráficos) ---------- */
+.charts-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:18px 20px;}
+.chart-box{border:1px solid var(--line-soft); border-radius:9px; padding:14px 16px; background:#fff;}
+.chart-box h4{font-size:13px; color:var(--navy); font-weight:700; margin-bottom:10px;}
+.chart-box canvas{max-height:220px;}
+@media (max-width: 900px){ .charts-row{grid-template-columns:1fr;} }
+
+/* ---------- Elenco — tema campo de futebol ---------- */
+.pitch-panel{
+  border-radius:var(--radius); margin-bottom:20px; overflow:hidden;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.045) 0px, rgba(255,255,255,0.045) 40px, transparent 40px, transparent 80px),
+    radial-gradient(circle at 50% 50%, #1c5c3a 0%, #164a2f 70%),
+    linear-gradient(180deg, #1c5c3a, #123f27);
+  border:1px solid rgba(255,255,255,0.08);
+  position:relative;
+}
+.pitch-panel .pitch-head{
+  padding:16px 20px; display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,0.14);
+  background:rgba(10,31,53,0.25);
+}
+.pitch-panel .pitch-head h3{font-size:17px; color:#fff; font-weight:700;}
+.pitch-panel .pitch-head .sub{font-size:11.5px; color:rgba(255,255,255,0.6); margin-top:2px;}
+.pitch-markings{
+  position:absolute; top:56px; left:50%; transform:translateX(-50%);
+  width:120px; height:120px; border:2px solid rgba(255,255,255,0.10); border-radius:50%;
+  pointer-events:none;
+}
+.jersey-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:14px;
+  padding:22px 20px; position:relative; z-index:1;
+}
+.jersey-btn{
+  background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.14); border-radius:12px;
+  padding:14px 10px 12px; cursor:pointer; text-align:center; transition:transform .12s ease, background .12s ease;
+  position:relative; backdrop-filter:blur(2px);
+}
+.jersey-btn:hover{transform:translateY(-2px); background:rgba(255,255,255,0.11);}
+.jersey-badge{
+  width:44px; height:44px; margin:0 auto 8px; border-radius:9px;
+  background:linear-gradient(160deg, var(--gold) 0%, #967650 100%);
+  color:var(--navy); font-weight:800; font-size:15px; letter-spacing:-0.02em;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 3px 8px rgba(0,0,0,0.25);
+}
+.jersey-nome{font-size:12.5px; font-weight:700; color:#fff; line-height:1.3; margin-bottom:2px;}
+.jersey-cat{font-size:10.5px; color:rgba(255,255,255,0.55); margin-bottom:8px;}
+.jersey-sinal{
+  position:absolute; top:8px; right:8px; width:9px; height:9px; border-radius:50%;
+  box-shadow:0 0 0 2px rgba(255,255,255,0.15);
+}
+.jersey-sinal.verde{background:#5FE0A5;}
+.jersey-sinal.amarelo{background:#E0C15F;}
+.jersey-sinal.vermelho{background:#E0715F;}
+.jersey-stats{display:flex; justify-content:center; gap:6px; flex-wrap:wrap;}
+.jersey-stat{
+  font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:100px;
+  background:rgba(255,255,255,0.10); color:rgba(255,255,255,0.85);
+}
 </style>
 </head>
 <body>
@@ -563,10 +625,70 @@ function ErroCarregamento({ mensagem }) {
   );
 }
 
+function GraficoComparativo({ titulo, labels, datasets, tipo, empilhado }) {
+  const { useRef, useEffect } = React;
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    chartRef.current = new Chart(canvasRef.current, {
+      type: tipo || "bar",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: datasets.length > 1, labels: { font: { size: 10.5 } } } },
+        scales: {
+          x: { stacked: !!empilhado, ticks: { font: { size: 10.5 } } },
+          y: { stacked: !!empilhado, beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [JSON.stringify(labels), JSON.stringify(datasets)]);
+
+  return (
+    <div className="chart-box">
+      <h4>{titulo}</h4>
+      <canvas ref={canvasRef}></canvas>
+    </div>
+  );
+}
+
 function Dashboard({ dados, onOpenAtleta }) {
   const linha = dados.atletas.map(a => ({ ...a, ...calcularSemaforo(a.id, dados) }));
   const contagem = { verde: 0, amarelo: 0, vermelho: 0 };
   linha.forEach(d => contagem[d.risco]++);
+
+  const AREAS = [
+    { chave: "psiData", label: "Psicologia", cor: "#6E56C8" },
+    { chave: "fisioData", label: "Fisioterapia", cor: "#2E7A93" },
+    { chave: "socialData", label: "Serviço Social", cor: "#B5883A" },
+    { chave: "perfData", label: "Performance", cor: "#A6473C" },
+  ];
+
+  // total de registros por área
+  const totalPorArea = AREAS.map(a =>
+    Object.values(dados[a.chave]).reduce((soma, lista) => soma + lista.length, 0)
+  );
+
+  // distribuição de sinal por área (verde / amarelo / vermelho / neutro)
+  const niveisSinal = ["verde", "amarelo", "vermelho", "neutro"];
+  const coresSinal = { verde: "#4C8B63", amarelo: "#B5883A", vermelho: "#A6473C", neutro: "#9AA5B1" };
+  const datasetsSinal = niveisSinal.map(nivel => ({
+    label: nivel === "verde" ? "Regular" : nivel === "amarelo" ? "Atenção" : nivel === "vermelho" ? "Prioridade" : "Informativo",
+    backgroundColor: coresSinal[nivel],
+    data: AREAS.map(a => {
+      let contador = 0;
+      Object.values(dados[a.chave]).forEach(lista => lista.forEach(r => {
+        const s = a.chave === "socialData" ? (r.statusPublico === "atencao" ? "amarelo" : "verde") : (r.sinal || "neutro");
+        if (s === nivel) contador++;
+      }));
+      return contador;
+    }),
+  }));
 
   return (
     <div>
@@ -582,20 +704,48 @@ function Dashboard({ dados, onOpenAtleta }) {
       </div>
 
       <div className="panel">
-        <div className="panel-head"><h3>Semáforo por atleta</h3></div>
-        <div className="athlete-grid">
-          {linha.map(d => (
-            <div key={d.id} className="athlete-card" onClick={() => onOpenAtleta(d.id)}>
-              <div className={"sinal " + d.risco}></div>
-              <div className="nome">{d.nome}{d.pendente_vinculo ? " ⚠︎" : ""}</div>
-              <div className="cat">{d.categoria || "Categoria não definida"}</div>
-              <div className="flags">
-                {d.sinais.length === 0 && <span className="flag ok">Sem pendências</span>}
-                {d.sinais.map((s, i) => <span key={i} className={"flag " + s.area}>{s.label}</span>)}
+        <div className="panel-head"><h3>Comparativo entre áreas</h3></div>
+        <div className="charts-row">
+          <GraficoComparativo
+            titulo="Registros por área"
+            labels={AREAS.map(a => a.label)}
+            datasets={[{ label: "Registros", backgroundColor: AREAS.map(a => a.cor), data: totalPorArea }]}
+          />
+          <GraficoComparativo
+            titulo="Distribuição de sinal por área"
+            labels={AREAS.map(a => a.label)}
+            datasets={datasetsSinal}
+            empilhado
+          />
+        </div>
+      </div>
+
+      <div className="pitch-panel">
+        <div className="pitch-head">
+          <div>
+            <h3>Elenco — Meia Noite EC</h3>
+            <div className="sub">Clique em um jogador para abrir o perfil completo</div>
+          </div>
+        </div>
+        <div className="pitch-markings"></div>
+        <div className="jersey-grid">
+          {linha.map(d => {
+            const iniciais = d.nome.split(" ").map(p => p[0]).slice(0, 2).join("").toUpperCase();
+            const totalRegistros = ["psiData","fisioData","socialData","perfData"]
+              .reduce((soma, chave) => soma + (dados[chave][d.id] || []).length, 0);
+            return (
+              <div key={d.id} className="jersey-btn" onClick={() => onOpenAtleta(d.id)}>
+                <div className={"jersey-sinal " + d.risco}></div>
+                <div className="jersey-badge">{iniciais}</div>
+                <div className="jersey-nome">{d.nome}</div>
+                <div className="jersey-cat">{d.categoria || "Sem categoria"}</div>
+                <div className="jersey-stats">
+                  <span className="jersey-stat">{totalRegistros} registro{totalRegistros === 1 ? "" : "s"}</span>
+                </div>
               </div>
-            </div>
-          ))}
-          {linha.length === 0 && <div className="empty-state">Nenhum atleta cadastrado ainda.</div>}
+            );
+          })}
+          {linha.length === 0 && <div className="empty-state" style={{color:"rgba(255,255,255,0.6)"}}>Nenhum atleta cadastrado ainda.</div>}
         </div>
       </div>
     </div>
