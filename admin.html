@@ -299,6 +299,13 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
   font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:100px;
   background:rgba(255,255,255,0.10); color:rgba(255,255,255,0.85);
 }
+
+/* ---------- Controles de gráfico por instrumento/estatística ---------- */
+.chart-controls{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+.chart-controls label{font-size:12.5px; font-weight:600; color:var(--navy);}
+.chart-controls select{padding:7px 10px; border:1px solid var(--line-soft); border-radius:7px; font-size:13px; color:var(--ink); background:#fff;}
+.chart-controls-note{font-size:11.5px; color:var(--muted);}
+.chart-box-wide{border:1px solid var(--line-soft); border-radius:9px; padding:16px; background:#fff; height:320px;}
 </style>
 </head>
 <body>
@@ -625,6 +632,36 @@ function ErroCarregamento({ mensagem }) {
   );
 }
 
+/**
+ * Extrai os campos "Chave: valor" embutidos no texto de uma observação
+ * (nota) — tanto do formato de psicologia ("CSAI-2R — Ans. Cognitiva: 10,
+ * Ans. Somática: 7...") quanto do de performance ("PASSE CERTO: 9, FALTA: 2...").
+ * Ignora o sufixo "(importado de...)" quando presente.
+ */
+function parseNota(nota) {
+  if (!nota) return { titulo: "", campos: {} };
+  const semSufixo = nota.replace(/\s*\([^)]*\)\s*$/, "");
+  let titulo = "";
+  let corpo = semSufixo;
+  const idxTraco = semSufixo.indexOf(" — ");
+  if (idxTraco !== -1) {
+    titulo = semSufixo.slice(0, idxTraco);
+    corpo = semSufixo.slice(idxTraco + 3);
+  }
+  const campos = {};
+  corpo.split(",").forEach((par) => {
+    const idx = par.indexOf(":");
+    if (idx === -1) return;
+    const chave = par.slice(0, idx).trim();
+    const valorStr = par.slice(idx + 1).trim();
+    const valorNum = Number(valorStr);
+    campos[chave] = isNaN(valorNum) || valorStr === "" ? valorStr : valorNum;
+  });
+  return { titulo, campos };
+}
+
+const PALETA_SUBESCALAS = ["#6E56C8", "#2E7A93", "#B5883A", "#A6473C", "#4C8B63", "#8a7a4a", "#4a6a8a", "#a84a7a"];
+
 function GraficoComparativo({ titulo, labels, datasets, tipo, empilhado }) {
   const { useRef, useEffect } = React;
   const canvasRef = useRef(null);
@@ -655,6 +692,119 @@ function GraficoComparativo({ titulo, labels, datasets, tipo, empilhado }) {
       <canvas ref={canvasRef}></canvas>
     </div>
   );
+}
+
+function DadosPorInstrumento({ dados }) {
+  const { useState } = React;
+
+  const instrumentos = Array.from(new Set(Object.values(dados.psiData).flat().map(r => r.tipo))).sort();
+  const [instrumento, setInstrumento] = useState(instrumentos[0] || "");
+
+  const registros = dados.atletas
+    .map(a => {
+      const reg = (dados.psiData[a.id] || []).find(r => r.tipo === instrumento);
+      if (!reg) return null;
+      return { atleta: a.nome, campos: parseNota(reg.nota).campos, data: reg.data };
+    })
+    .filter(Boolean);
+
+  const subescalas = registros.length
+    ? Object.keys(registros[0].campos).filter(k => typeof registros[0].campos[k] === "number")
+    : [];
+
+  const labels = registros.map(r => r.atleta);
+  const datasets = subescalas.map((sub, i) => ({
+    label: sub,
+    backgroundColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length],
+    data: registros.map(r => (typeof r.campos[sub] === "number" ? r.campos[sub] : 0)),
+  }));
+
+  if (instrumentos.length === 0) {
+    return <div className="empty-state">Nenhum dado de psicologia lançado ainda.</div>;
+  }
+
+  return (
+    <div>
+      <div className="chart-controls">
+        <label>Instrumento:</label>
+        <select value={instrumento} onChange={e => setInstrumento(e.target.value)}>
+          {instrumentos.map(i => <option key={i} value={i}>{i}</option>)}
+        </select>
+        <span className="chart-controls-note">{registros.length} atleta{registros.length === 1 ? "" : "s"} com registro deste instrumento (valor mais recente de cada um)</span>
+      </div>
+      {registros.length === 0 ? (
+        <div className="empty-state">Nenhum atleta com esse instrumento lançado.</div>
+      ) : (
+        <div className="chart-box chart-box-wide">
+          <canvas ref={el => renderizarBarras(el, labels, datasets)}></canvas>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DadosPorEstatistica({ dados }) {
+  const { useState } = React;
+
+  const stats = Array.from(new Set(
+    Object.values(dados.perfData).flat().flatMap(r => Object.keys(parseNota(r.nota).campos))
+  )).sort();
+  const [stat, setStat] = useState(stats.includes("AÇÃO COM BOLA") ? "AÇÃO COM BOLA" : (stats[0] || ""));
+
+  const registros = dados.atletas
+    .map(a => {
+      const regs = dados.perfData[a.id] || [];
+      if (!regs.length) return null;
+      const campos = parseNota(regs[0].nota).campos;
+      const valor = campos[stat];
+      return typeof valor === "number" ? { atleta: a.nome, valor } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.valor - a.valor);
+
+  if (stats.length === 0) {
+    return <div className="empty-state">Nenhum dado de performance lançado ainda.</div>;
+  }
+
+  const labels = registros.map(r => r.atleta);
+  const datasets = [{ label: stat, backgroundColor: "#A6473C", data: registros.map(r => r.valor) }];
+
+  return (
+    <div>
+      <div className="chart-controls">
+        <label>Estatística:</label>
+        <select value={stat} onChange={e => setStat(e.target.value)}>
+          {stats.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <span className="chart-controls-note">{registros.length} atleta{registros.length === 1 ? "" : "s"} com essa estatística no jogo mais recente, ordenado do maior pro menor</span>
+      </div>
+      {registros.length === 0 ? (
+        <div className="empty-state">Nenhum atleta com essa estatística lançada.</div>
+      ) : (
+        <div className="chart-box chart-box-wide">
+          <canvas ref={el => renderizarBarras(el, labels, datasets)}></canvas>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderizarBarras(canvas, labels, datasets) {
+  if (!canvas) return;
+  if (canvas._chartInstance) canvas._chartInstance.destroy();
+  canvas._chartInstance = new Chart(canvas, {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: datasets.length > 1, labels: { font: { size: 10.5 } } } },
+      scales: {
+        x: { ticks: { font: { size: 10.5 }, maxRotation: 45, minRotation: 0 } },
+        y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+      },
+    },
+  });
 }
 
 function Dashboard({ dados, onOpenAtleta }) {
@@ -717,6 +867,20 @@ function Dashboard({ dados, onOpenAtleta }) {
             datasets={datasetsSinal}
             empilhado
           />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head"><h3>Dados de psicologia por instrumento</h3></div>
+        <div className="panel-body" style={{padding:"14px 20px 20px"}}>
+          <DadosPorInstrumento dados={dados} />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head"><h3>Dados de performance por estatística</h3></div>
+        <div className="panel-body" style={{padding:"14px 20px 20px"}}>
+          <DadosPorEstatistica dados={dados} />
         </div>
       </div>
 
