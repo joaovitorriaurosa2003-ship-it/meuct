@@ -184,6 +184,15 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 .pill-btn.primary:hover{background:var(--navy-3);}
 .pill-btn:disabled{opacity:.5; cursor:not-allowed;}
 
+/* ---------- Importador de CSV ---------- */
+.import-box{padding:4px 0;}
+.import-drop{
+  border:1.5px dashed var(--line-soft); border-radius:9px; padding:18px;
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap; background:rgba(10,31,53,0.015);
+}
+.import-hint{font-size:12.5px; color:var(--muted);}
+.import-preview table{margin-top:10px;}
+
 @media (max-width: 900px){
   .kpi-row{grid-template-columns:repeat(2,1fr);}
   .page{padding:20px 16px;}
@@ -610,11 +619,212 @@ function FormNovoRegistro({ atletas, tiposSugeridos, chave, onSalvar, onCancelar
   );
 }
 
+/* ---------- Importador de CSV de análise de jogo ---------- */
+
+function dataBrTracoParaIso(dataBr) {
+  const [d, m, y] = (dataBr || "").split("-");
+  if (!d || !m || !y) return dataBr || "";
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
+function extrairNomesJogadores(campoPlayer) {
+  campoPlayer = (campoPlayer || "").trim();
+  if (!campoPlayer) return [];
+  return campoPlayer
+    .split("|")
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((parte) => {
+      const m = parte.match(/^\d+-(.+)$/);
+      return m ? m[1].trim() : parte;
+    });
+}
+
+/** Porta em JS do parse_jogo_csv.py — lê o CSV bruto de eventos e agrega por jogador. */
+function parseJogoCsv(texto) {
+  const linhas = texto.split(/\r?\n/);
+  const n = linhas.length;
+  let i = 0;
+
+  const meta = {};
+  while (i < n && linhas[i].trim() !== "") {
+    const linha = linhas[i];
+    if (linha.includes(";") && linha.trim() !== "Resumo") {
+      const idx = linha.indexOf(";");
+      meta[linha.slice(0, idx).trim()] = linha.slice(idx + 1).trim();
+    }
+    i++;
+  }
+
+  const dataIso = dataBrTracoParaIso(meta["Data"]);
+  const tituloJogo = `Jogo — ${meta["Equipe Local"] || "?"} ${meta["Resultado"] || "?"} x ${meta["Equipe Visitante"] || "?"} ${meta["Competição"] || ""}`.trim();
+
+  const contagem = {};
+  let categoriaAtual = null;
+
+  while (i < n) {
+    const linha = linhas[i];
+    const mCat = linha.match(/^CATEGORY:\s*(.+?)\s*$/);
+    if (mCat) {
+      categoriaAtual = mCat[1].trim();
+      i++;
+      if (i < n) i++; // pula linha de cabeçalho da categoria
+      continue;
+    }
+    if (categoriaAtual && linha.trim() !== "") {
+      const campos = linha.split(";");
+      if (campos.length > 5) {
+        extrairNomesJogadores(campos[5]).forEach((jogador) => {
+          if (!contagem[jogador]) contagem[jogador] = {};
+          contagem[jogador][categoriaAtual] = (contagem[jogador][categoriaAtual] || 0) + 1;
+        });
+      }
+      i++;
+      continue;
+    }
+    if (linha.trim() === "") categoriaAtual = null;
+    i++;
+  }
+
+  const registros = Object.keys(contagem)
+    .sort()
+    .map((jogador) => {
+      const cats = contagem[jogador];
+      const nota = Object.keys(cats).sort().map((c) => `${c}: ${cats[c]}`).join(", ") + " (importado da análise de jogo)";
+      return { atletaNome: jogador, data: dataIso, tipo: tituloJogo, nota, sinal: "neutro", origem: "analise_jogo_import_csv" };
+    });
+
+  return { meta, tituloJogo, dataIso, registros };
+}
+
+function ImportadorCSV({ atletas, onImportado }) {
+  const { useState } = React;
+  const [preview, setPreview] = useState(null);
+  const [erroLeitura, setErroLeitura] = useState(null);
+  const [importando, setImportando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setResultado(null);
+    setErroLeitura(null);
+    setPreview(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = parseJogoCsv(ev.target.result);
+        if (parsed.registros.length === 0) {
+          setErroLeitura("Não consegui identificar nenhum jogador nesse arquivo. Confere se é o formato certo de análise de jogo.");
+          return;
+        }
+        setPreview(parsed);
+      } catch (err) {
+        setErroLeitura("Erro ao ler o arquivo: " + err.message);
+      }
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  async function confirmarImportacao() {
+    if (!preview) return;
+    setImportando(true);
+    let importados = 0, pulados = 0, novosAtletas = 0;
+
+    for (const reg of preview.registros) {
+      let atleta = atletas.find((a) => (a.nome || "").trim().toLowerCase() === reg.atletaNome.trim().toLowerCase());
+      let atletaId;
+      if (atleta) {
+        atletaId = atleta.id;
+      } else {
+        const novo = await db.collection(COL_ATLETAS).add({
+          nome: reg.atletaNome,
+          categoria: "",
+          origem: "importacao_csv_site",
+          pendente_vinculo: true,
+        });
+        atletaId = novo.id;
+        novosAtletas++;
+      }
+
+      // evita duplicar o mesmo jogo pro mesmo atleta
+      const existentes = await db.collection(COL_ATLETAS).doc(atletaId)
+        .collection(SUBCOLS.performance).where("tipo", "==", reg.tipo).limit(1).get();
+      if (!existentes.empty) {
+        pulados++;
+        continue;
+      }
+
+      await adicionarRegistro(atletaId, "performance", {
+        data: reg.data, tipo: reg.tipo, nota: reg.nota, sinal: reg.sinal, origem: reg.origem,
+      });
+      importados++;
+    }
+
+    setImportando(false);
+    setResultado({ importados, pulados, novosAtletas });
+    setPreview(null);
+    onImportado();
+  }
+
+  return (
+    <div className="import-box">
+      <div className="import-drop">
+        <input type="file" accept=".csv" id="csv-input" onChange={handleFile} style={{display:"none"}} />
+        <label htmlFor="csv-input" className="pill-btn primary">Escolher arquivo CSV</label>
+        <span className="import-hint">Exporte do sistema de análise de jogo e envie aqui — um arquivo por partida.</span>
+      </div>
+
+      {erroLeitura && (
+        <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)", marginTop:14}}>
+          <span>{erroLeitura}</span>
+        </div>
+      )}
+
+      {preview && (
+        <div className="import-preview">
+          <div className="access-note admin" style={{marginTop:14}}>
+            <span><b>{preview.tituloJogo}</b> · {preview.registros.length} jogador(es) identificado(s). Confira antes de confirmar.</span>
+          </div>
+          <table>
+            <thead><tr><th>Jogador</th><th>Estatísticas</th><th>Já cadastrado?</th></tr></thead>
+            <tbody>
+              {preview.registros.map((r, i) => {
+                const existe = atletas.some((a) => (a.nome || "").trim().toLowerCase() === r.atletaNome.trim().toLowerCase());
+                return (
+                  <tr key={i}>
+                    <td style={{fontWeight:600, color:"var(--navy)"}}>{r.atletaNome}</td>
+                    <td className="muted">{r.nota}</td>
+                    <td>{existe ? <span className="badge verde">Sim</span> : <span className="badge amarelo">Novo atleta</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="form-actions" style={{padding:"14px 0 0"}}>
+            <button className="pill-btn" onClick={() => setPreview(null)} disabled={importando}>Cancelar</button>
+            <button className="pill-btn primary" onClick={confirmarImportacao} disabled={importando}>
+              {importando ? "Importando..." : `Confirmar importação (${preview.registros.length})`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {resultado && (
+        <div className="access-note" style={{background:"var(--verde-bg)", borderColor:"var(--verde)", marginTop:14}}>
+          <span><b>Importado:</b> {resultado.importados} registro(s) novo(s), {resultado.pulados} pulado(s) (jogo já existia pro atleta), {resultado.novosAtletas} atleta(s) novo(s) criado(s) (marcados como pendente de vínculo).</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [atletas, setAtletas] = useState(null);
   const [registros, setRegistros] = useState({});
   const [erro, setErro] = useState(null);
   const [formAberto, setFormAberto] = useState(false);
+  const [importadorAberto, setImportadorAberto] = useState(false);
   const [toast, setToast] = useState(null);
 
   async function carregar() {
@@ -655,7 +865,20 @@ function App() {
         ) : !atletas ? (
           <div className="empty-state">Carregando dados do Firestore...</div>
         ) : (
-          <div className="panel">
+          <React.Fragment>
+            <div className="panel">
+              <div className="panel-head">
+                <h3>Importar CSV de análise de jogo</h3>
+                <button className="pill-btn primary" onClick={() => setImportadorAberto(v => !v)}>{importadorAberto ? "Fechar" : "+ Importar CSV"}</button>
+              </div>
+              {importadorAberto && (
+                <div style={{padding:"14px 20px 20px"}}>
+                  <ImportadorCSV atletas={atletas} onImportado={() => { carregar(); setImportadorAberto(false); }} />
+                </div>
+              )}
+            </div>
+
+            <div className="panel">
             <div className="panel-head">
               <h3>Estatísticas de jogo — todos os atletas</h3>
               <button className="pill-btn primary" onClick={() => setFormAberto(v => !v)}>{formAberto ? "Fechar" : "+ Novo registro"}</button>
@@ -689,6 +912,7 @@ function App() {
               </table>
             </div>
           </div>
+          </React.Fragment>
         )}
       </div>
       {toast && <div className="toast"><span className="dot"></span>{toast}</div>}
