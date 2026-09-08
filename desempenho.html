@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Performance — CT Integrado</title>
+<title>Desempenho — CT Integrado</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -279,6 +279,7 @@ const COL_ATLETAS = "ct_atletas";
 const SUBCOLS = {
   psi: "ct_psi_avaliacoes",
   fisio: "ct_fisio_registros",
+  fisiologia: "ct_fisiologia_dados",
   social: "ct_social_acompanhamento",
   performance: "ct_performance_jogos",
 };
@@ -384,8 +385,10 @@ const HUBS = [
   { id: "admin", label: "Painel Admin", href: "admin.html" },
   { id: "psicologia", label: "Psicologia", href: "psicologia.html" },
   { id: "fisioterapia", label: "Fisioterapia", href: "fisioterapia.html" },
+  { id: "fisiologia", label: "Fisiologia", href: "fisiologia.html" },
   { id: "social", label: "Serviço Social", href: "servico-social.html" },
-  { id: "performance", label: "Performance", href: "performance.html" },
+  { id: "desempenho", label: "Desempenho", href: "desempenho.html" },
+  { id: "treinador", label: "Treinadores", href: "treinador.html" },
 ];
 
 function HubBar({ current }) {
@@ -848,12 +851,12 @@ function App() {
 
   return (
     <div>
-      <HubBar current="performance" />
+      <HubBar current="desempenho" />
       <ChatWidget />
       <div className="page">
         <div className="page-head">
           <div>
-            <h1>Performance</h1>
+            <h1>Desempenho</h1>
             <div className="crumb">CT Integrado · Meia Noite EC · conectado ao Firestore</div>
           </div>
         </div>
@@ -880,7 +883,7 @@ function App() {
 
             <div className="panel">
             <div className="panel-head">
-              <h3>Estatísticas de jogo — todos os atletas</h3>
+              <h3>Estatísticas de desempenho — todos os atletas</h3>
               <button className="pill-btn primary" onClick={() => setFormAberto(v => !v)}>{formAberto ? "Fechar" : "+ Novo registro"}</button>
             </div>
             {formAberto && (
