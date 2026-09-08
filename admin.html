@@ -306,6 +306,23 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 .chart-controls select{padding:7px 10px; border:1px solid var(--line-soft); border-radius:7px; font-size:13px; color:var(--ink); background:#fff;}
 .chart-controls-note{font-size:11.5px; color:var(--muted);}
 .chart-box-wide{border:1px solid var(--line-soft); border-radius:9px; padding:16px; background:#fff; height:320px;}
+
+/* ---------- Abas de filtro (substituem <select>) ---------- */
+.tab-select{display:flex; flex-wrap:wrap; gap:6px;}
+.tab-select-item{
+  padding:7px 13px; border-radius:100px; border:1.5px solid var(--line-soft); background:#fff;
+  color:var(--muted); font-size:12.5px; font-weight:600; cursor:pointer; transition:all .12s ease;
+}
+.tab-select-item:hover{border-color:var(--gold); color:var(--navy);}
+.tab-select-item.active{background:var(--navy); border-color:var(--navy); color:#fff;}
+.tab-select-sm .tab-select-item{padding:5px 11px; font-size:11.5px;}
+
+/* ---------- Cruzamento de dados ---------- */
+.cruzamento-eixos{display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;}
+.eixo-picker{flex:1; min-width:220px; display:flex; flex-direction:column; gap:8px; background:rgba(10,31,53,0.02); border:1px solid var(--line-soft); border-radius:9px; padding:14px;}
+.eixo-label{font-size:11px; font-weight:700; color:var(--gold); text-transform:uppercase; letter-spacing:0.04em;}
+.cruzamento-x{font-size:20px; font-weight:700; color:var(--muted); padding-top:34px; flex-shrink:0;}
+@media (max-width: 700px){ .cruzamento-eixos{flex-direction:column;} .cruzamento-x{padding-top:0; text-align:center;} }
 </style>
 </head>
 <body>
@@ -694,6 +711,63 @@ function GraficoComparativo({ titulo, labels, datasets, tipo, empilhado }) {
   );
 }
 
+/* ---------- Seletor em abas (substitui os <select> de filtro) ---------- */
+function TabSelect({ opcoes, valor, onChange, tamanho }) {
+  return (
+    <div className={"tab-select" + (tamanho === "sm" ? " tab-select-sm" : "")}>
+      {opcoes.map((op) => (
+        <button
+          key={op}
+          className={"tab-select-item" + (op === valor ? " active" : "")}
+          onClick={() => onChange(op)}
+          type="button"
+        >
+          {op}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- Funções auxiliares de extração de dados (usadas nos gráficos e no cruzamento) ---------- */
+
+function instrumentosPsi(dados) {
+  return Array.from(new Set(Object.values(dados.psiData).flat().map((r) => r.tipo))).sort();
+}
+
+function estatisticasPerformance(dados) {
+  return Array.from(new Set(
+    Object.values(dados.perfData).flat().flatMap((r) => Object.keys(parseNota(r.nota).campos))
+  )).sort();
+}
+
+function subcamposDoInstrumento(dados, instrumento) {
+  for (const lista of Object.values(dados.psiData)) {
+    const reg = lista.find((r) => r.tipo === instrumento);
+    if (reg) {
+      const campos = parseNota(reg.nota).campos;
+      return Object.keys(campos).filter((k) => typeof campos[k] === "number");
+    }
+  }
+  return [];
+}
+
+/** Valor mais recente de um atleta para instrumento+subcampo de psicologia (ou null). */
+function valorPsi(dados, atletaId, instrumento, subcampo) {
+  const reg = (dados.psiData[atletaId] || []).find((r) => r.tipo === instrumento);
+  if (!reg) return null;
+  const v = parseNota(reg.nota).campos[subcampo];
+  return typeof v === "number" ? v : null;
+}
+
+/** Valor mais recente de um atleta para uma estatística de performance (ou null). */
+function valorPerformance(dados, atletaId, estatistica) {
+  const regs = dados.perfData[atletaId] || [];
+  if (!regs.length) return null;
+  const v = parseNota(regs[0].nota).campos[estatistica];
+  return typeof v === "number" ? v : null;
+}
+
 function DadosPorInstrumento({ dados }) {
   const { useState } = React;
 
@@ -726,10 +800,7 @@ function DadosPorInstrumento({ dados }) {
   return (
     <div>
       <div className="chart-controls">
-        <label>Instrumento:</label>
-        <select value={instrumento} onChange={e => setInstrumento(e.target.value)}>
-          {instrumentos.map(i => <option key={i} value={i}>{i}</option>)}
-        </select>
+        <TabSelect opcoes={instrumentos} valor={instrumento} onChange={setInstrumento} />
         <span className="chart-controls-note">{registros.length} atleta{registros.length === 1 ? "" : "s"} com registro deste instrumento (valor mais recente de cada um)</span>
       </div>
       {registros.length === 0 ? (
@@ -772,10 +843,7 @@ function DadosPorEstatistica({ dados }) {
   return (
     <div>
       <div className="chart-controls">
-        <label>Estatística:</label>
-        <select value={stat} onChange={e => setStat(e.target.value)}>
-          {stats.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <TabSelect opcoes={stats} valor={stat} onChange={setStat} />
         <span className="chart-controls-note">{registros.length} atleta{registros.length === 1 ? "" : "s"} com essa estatística no jogo mais recente, ordenado do maior pro menor</span>
       </div>
       {registros.length === 0 ? (
@@ -805,6 +873,141 @@ function renderizarBarras(canvas, labels, datasets) {
       },
     },
   });
+}
+
+function EixoPicker({ label, dados, config, onChange }) {
+  const areas = ["Psicologia", "Performance"];
+  const instrumentos = instrumentosPsi(dados);
+  const stats = estatisticasPerformance(dados);
+  const subcampos = config.area === "Psicologia" && config.instrumento ? subcamposDoInstrumento(dados, config.instrumento) : [];
+
+  function setArea(area) {
+    if (area === "Psicologia") {
+      const inst = instrumentos[0] || "";
+      onChange({ area, instrumento: inst, subcampo: subcamposDoInstrumento(dados, inst)[0] || "", estatistica: "" });
+    } else {
+      onChange({ area, instrumento: "", subcampo: "", estatistica: stats[0] || "" });
+    }
+  }
+
+  return (
+    <div className="eixo-picker">
+      <div className="eixo-label">{label}</div>
+      <TabSelect opcoes={areas} valor={config.area} onChange={setArea} tamanho="sm" />
+      {config.area === "Psicologia" ? (
+        <React.Fragment>
+          <TabSelect
+            opcoes={instrumentos}
+            valor={config.instrumento}
+            onChange={(inst) => onChange({ ...config, instrumento: inst, subcampo: subcamposDoInstrumento(dados, inst)[0] || "" })}
+            tamanho="sm"
+          />
+          {subcampos.length > 0 && (
+            <TabSelect opcoes={subcampos} valor={config.subcampo} onChange={(s) => onChange({ ...config, subcampo: s })} tamanho="sm" />
+          )}
+        </React.Fragment>
+      ) : (
+        <TabSelect opcoes={stats} valor={config.estatistica} onChange={(e) => onChange({ ...config, estatistica: e })} tamanho="sm" />
+      )}
+    </div>
+  );
+}
+
+function valorDoEixo(dados, atletaId, config) {
+  if (config.area === "Psicologia") return valorPsi(dados, atletaId, config.instrumento, config.subcampo);
+  return valorPerformance(dados, atletaId, config.estatistica);
+}
+
+function labelDoEixo(config) {
+  if (config.area === "Psicologia") return `${config.instrumento} — ${config.subcampo}`;
+  return config.estatistica;
+}
+
+function CruzamentoDados({ dados }) {
+  const { useState, useRef, useEffect } = React;
+  const instrumentosIniciais = instrumentosPsi(dados);
+  const statsIniciais = estatisticasPerformance(dados);
+
+  const [eixoX, setEixoX] = useState({
+    area: "Psicologia",
+    instrumento: instrumentosIniciais[0] || "",
+    subcampo: subcamposDoInstrumento(dados, instrumentosIniciais[0] || "")[0] || "",
+    estatistica: "",
+  });
+  const [eixoY, setEixoY] = useState({
+    area: "Performance",
+    instrumento: "",
+    subcampo: "",
+    estatistica: statsIniciais[0] || "",
+  });
+
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  const pontos = dados.atletas
+    .map((a) => {
+      const x = valorDoEixo(dados, a.id, eixoX);
+      const y = valorDoEixo(dados, a.id, eixoY);
+      if (typeof x !== "number" || typeof y !== "number") return null;
+      return { x, y, nome: a.nome };
+    })
+    .filter(Boolean);
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    chartRef.current = new Chart(canvasRef.current, {
+      type: "scatter",
+      data: {
+        datasets: [{
+          label: `${labelDoEixo(eixoX)} × ${labelDoEixo(eixoY)}`,
+          data: pontos,
+          backgroundColor: "#B8976A",
+          borderColor: "#0A1F35",
+          borderWidth: 1,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.raw.nome}: ${labelDoEixo(eixoX)} = ${ctx.raw.x}, ${labelDoEixo(eixoY)} = ${ctx.raw.y}`,
+            },
+          },
+        },
+        scales: {
+          x: { title: { display: true, text: labelDoEixo(eixoX), font: { size: 11 } }, ticks: { font: { size: 10.5 } } },
+          y: { title: { display: true, text: labelDoEixo(eixoY), font: { size: 11 } }, ticks: { font: { size: 10.5 } } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [JSON.stringify(eixoX), JSON.stringify(eixoY), JSON.stringify(pontos)]);
+
+  return (
+    <div>
+      <div className="cruzamento-eixos">
+        <EixoPicker label="Eixo X" dados={dados} config={eixoX} onChange={setEixoX} />
+        <div className="cruzamento-x">×</div>
+        <EixoPicker label="Eixo Y" dados={dados} config={eixoY} onChange={setEixoY} />
+      </div>
+      {pontos.length === 0 ? (
+        <div className="empty-state">Nenhum atleta tem os dois dados selecionados ao mesmo tempo — escolha outra combinação.</div>
+      ) : (
+        <React.Fragment>
+          <div className="chart-box-wide" style={{marginTop:14}}>
+            <canvas ref={canvasRef}></canvas>
+          </div>
+          <div className="chart-controls-note" style={{marginTop:8}}>{pontos.length} atleta{pontos.length === 1 ? "" : "s"} com os dois valores disponíveis. Passe o mouse sobre um ponto pra ver quem é.</div>
+        </React.Fragment>
+      )}
+    </div>
+  );
 }
 
 function Dashboard({ dados, onOpenAtleta }) {
@@ -867,6 +1070,13 @@ function Dashboard({ dados, onOpenAtleta }) {
             datasets={datasetsSinal}
             empilhado
           />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-head"><h3>Cruzamento de dados</h3></div>
+        <div className="panel-body" style={{padding:"14px 20px 20px"}}>
+          <CruzamentoDados dados={dados} />
         </div>
       </div>
 
@@ -970,11 +1180,132 @@ function TimelineAtleta({ atletaId, dados }) {
   );
 }
 
+function EvolucaoPsiAtleta({ dados, atletaId }) {
+  const { useState, useRef, useEffect } = React;
+  const registrosAtleta = dados.psiData[atletaId] || [];
+  const instrumentos = Array.from(new Set(registrosAtleta.map((r) => r.tipo))).sort();
+  const [instrumento, setInstrumento] = useState(instrumentos[0] || "");
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  const historico = registrosAtleta
+    .filter((r) => r.tipo === instrumento)
+    .map((r) => ({ data: r.data, campos: parseNota(r.nota).campos }))
+    .sort((a, b) => a.data.localeCompare(b.data));
+
+  const subescalas = historico.length
+    ? Object.keys(historico[0].campos).filter((k) => typeof historico[0].campos[k] === "number")
+    : [];
+
+  useEffect(() => {
+    if (!canvasRef.current || historico.length === 0) return;
+    if (chartRef.current) chartRef.current.destroy();
+    chartRef.current = new Chart(canvasRef.current, {
+      type: "line",
+      data: {
+        labels: historico.map((h) => formatarData(h.data)),
+        datasets: subescalas.map((sub, i) => ({
+          label: sub,
+          data: historico.map((h) => (typeof h.campos[sub] === "number" ? h.campos[sub] : null)),
+          borderColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length],
+          backgroundColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length] + "33",
+          tension: 0.25,
+          pointRadius: 4,
+        })),
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { font: { size: 10.5 } } } },
+        scales: {
+          x: { ticks: { font: { size: 10.5 } } },
+          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [instrumento, JSON.stringify(historico)]);
+
+  if (instrumentos.length === 0) return <div className="empty-state">Nenhum dado de psicologia para este atleta ainda.</div>;
+
+  return (
+    <div>
+      <div className="chart-controls">
+        <TabSelect opcoes={instrumentos} valor={instrumento} onChange={setInstrumento} />
+        <span className="chart-controls-note">{historico.length} avaliaç{historico.length === 1 ? "ão" : "ões"} ao longo do tempo</span>
+      </div>
+      {historico.length === 0 ? (
+        <div className="empty-state">Sem histórico para esse instrumento.</div>
+      ) : (
+        <div className="chart-box-wide"><canvas ref={canvasRef}></canvas></div>
+      )}
+    </div>
+  );
+}
+
+function PerformanceAtleta({ dados, atletaId }) {
+  const { useState, useRef, useEffect } = React;
+  const registrosAtleta = dados.perfData[atletaId] || [];
+  const jogos = registrosAtleta.map((r) => r.tipo);
+  const [jogo, setJogo] = useState(jogos[0] || "");
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  const registro = registrosAtleta.find((r) => r.tipo === jogo);
+  const campos = registro ? parseNota(registro.nota).campos : {};
+  const chaves = Object.keys(campos).filter((k) => typeof campos[k] === "number").sort((a, b) => campos[b] - campos[a]);
+
+  useEffect(() => {
+    if (!canvasRef.current || chaves.length === 0) return;
+    if (chartRef.current) chartRef.current.destroy();
+    chartRef.current = new Chart(canvasRef.current, {
+      type: "bar",
+      data: {
+        labels: chaves,
+        datasets: [{ label: jogo, data: chaves.map((k) => campos[k]), backgroundColor: "#A6473C" }],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+          y: { ticks: { font: { size: 10.5 } } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [jogo, JSON.stringify(campos)]);
+
+  if (jogos.length === 0) return <div className="empty-state">Nenhum dado de performance para este atleta ainda.</div>;
+
+  return (
+    <div>
+      <div className="chart-controls">
+        <TabSelect opcoes={jogos} valor={jogo} onChange={setJogo} />
+        <span className="chart-controls-note">{formatarData(registro ? registro.data : "")}</span>
+      </div>
+      {chaves.length === 0 ? (
+        <div className="empty-state">Sem estatísticas nesse jogo.</div>
+      ) : (
+        <div className="chart-box-wide" style={{height: Math.max(220, chaves.length * 28)}}><canvas ref={canvasRef}></canvas></div>
+      )}
+    </div>
+  );
+}
+
 function PerfilAtleta({ atletaId, onBack, dados }) {
+  const { useState } = React;
   const atleta = dados.atletas.find(a => a.id === atletaId);
   if (!atleta) return <div className="empty-state">Atleta não encontrado.</div>;
   const { risco } = calcularSemaforo(atletaId, dados);
   const iniciais = atleta.nome.split(" ").map(p => p[0]).slice(0, 2).join("");
+
+  const temPsi = (dados.psiData[atletaId] || []).length > 0;
+  const temPerf = (dados.perfData[atletaId] || []).length > 0;
+  const abas = ["Linha do tempo", ...(temPsi ? ["Psicologia"] : []), ...(temPerf ? ["Performance"] : [])];
+  const [aba, setAba] = useState(abas[0]);
 
   return (
     <div>
@@ -991,9 +1322,16 @@ function PerfilAtleta({ atletaId, onBack, dados }) {
           <span><b>Pendente de vínculo:</b> este atleta foi criado automaticamente a partir de uma importação e ainda não foi confirmado como correspondência de outro cadastro.</span>
         </div>
       )}
+
       <div className="panel">
-        <div className="panel-head"><h3>Linha do tempo — todas as áreas</h3></div>
-        <TimelineAtleta atletaId={atletaId} dados={dados} />
+        <div className="panel-head">
+          <TabSelect opcoes={abas} valor={aba} onChange={setAba} />
+        </div>
+        <div className="panel-body" style={{padding: aba === "Linha do tempo" ? 0 : "16px 20px 20px"}}>
+          {aba === "Linha do tempo" && <TimelineAtleta atletaId={atletaId} dados={dados} />}
+          {aba === "Psicologia" && <EvolucaoPsiAtleta dados={dados} atletaId={atletaId} />}
+          {aba === "Performance" && <PerformanceAtleta dados={dados} atletaId={atletaId} />}
+        </div>
       </div>
     </div>
   );
