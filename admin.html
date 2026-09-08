@@ -655,16 +655,25 @@ function ErroCarregamento({ mensagem }) {
  * Ans. Somática: 7...") quanto do de performance ("PASSE CERTO: 9, FALTA: 2...").
  * Ignora o sufixo "(importado de...)" quando presente.
  */
-function parseNota(nota) {
+function parseNota(nota, tipoConhecido) {
   if (!nota) return { titulo: "", campos: {} };
   const semSufixo = nota.replace(/\s*\([^)]*\)\s*$/, "");
   let titulo = "";
   let corpo = semSufixo;
-  const idxTraco = semSufixo.indexOf(" — ");
-  if (idxTraco !== -1) {
-    titulo = semSufixo.slice(0, idxTraco);
-    corpo = semSufixo.slice(idxTraco + 3);
+
+  if (tipoConhecido && semSufixo.indexOf(tipoConhecido + " — ") === 0) {
+    // corte exato pelo nome do instrumento já conhecido — funciona mesmo
+    // quando o próprio nome do instrumento contém um travessão (ex: "SIQ — IMAGEM MENTAL").
+    titulo = tipoConhecido;
+    corpo = semSufixo.slice((tipoConhecido + " — ").length);
+  } else {
+    const idxTraco = semSufixo.indexOf(" — ");
+    if (idxTraco !== -1) {
+      titulo = semSufixo.slice(0, idxTraco);
+      corpo = semSufixo.slice(idxTraco + 3);
+    }
   }
+
   const campos = {};
   corpo.split(",").forEach((par) => {
     const idx = par.indexOf(":");
@@ -737,7 +746,7 @@ function instrumentosPsi(dados) {
 
 function estatisticasPerformance(dados) {
   return Array.from(new Set(
-    Object.values(dados.perfData).flat().flatMap((r) => Object.keys(parseNota(r.nota).campos))
+    Object.values(dados.perfData).flat().flatMap((r) => Object.keys(parseNota(r.nota, r.tipo).campos))
   )).sort();
 }
 
@@ -745,7 +754,7 @@ function subcamposDoInstrumento(dados, instrumento) {
   for (const lista of Object.values(dados.psiData)) {
     const reg = lista.find((r) => r.tipo === instrumento);
     if (reg) {
-      const campos = parseNota(reg.nota).campos;
+      const campos = parseNota(reg.nota, reg.tipo).campos;
       return Object.keys(campos).filter((k) => typeof campos[k] === "number");
     }
   }
@@ -756,7 +765,7 @@ function subcamposDoInstrumento(dados, instrumento) {
 function valorPsi(dados, atletaId, instrumento, subcampo) {
   const reg = (dados.psiData[atletaId] || []).find((r) => r.tipo === instrumento);
   if (!reg) return null;
-  const v = parseNota(reg.nota).campos[subcampo];
+  const v = parseNota(reg.nota, reg.tipo).campos[subcampo];
   return typeof v === "number" ? v : null;
 }
 
@@ -768,45 +777,164 @@ function valorPerformance(dados, atletaId, estatistica) {
   return typeof v === "number" ? v : null;
 }
 
-function DadosPorInstrumento({ dados }) {
+/**
+ * Mapeamento de CONSTRUTOS psicológicos -> quais instrumentos/campos
+ * alimentam cada um. Um construto pode ser medido por mais de um
+ * instrumento (ex: ansiedade somática aparece no CSAI-2R, no SAS e no
+ * HAM-A). Isso é uma categorização clínica — o agrupamento abaixo é
+ * uma proposta inicial baseada nos nomes dos campos; vale revisão de
+ * quem faz a análise, já que instrumentos diferentes podem usar
+ * escalas de pontuação diferentes mesmo medindo "a mesma coisa".
+ */
+const CONSTRUCTOS_PSI = {
+  "Ansiedade Cognitiva": [{ tipo: "CSAI-2R", campo: "Ans. Cognitiva" }],
+  "Ansiedade Somática": [
+    { tipo: "CSAI-2R", campo: "Ans. Somática" },
+    { tipo: "SAS", campo: "Somática" },
+    { tipo: "HAM-A", campo: "Ansiedade Somática" },
+  ],
+  "Ansiedade Psíquica (HAM-A)": [{ tipo: "HAM-A", campo: "Ansiedade Psíquica" }],
+  "Ansiedade Total (HAM-A)": [{ tipo: "HAM-A", campo: "Total" }],
+  "Autoconfiança": [
+    { tipo: "CSAI-2R", campo: "Autoconfiança" },
+    { tipo: "ACSI-28", campo: "Confiança" },
+  ],
+  "Preocupação": [
+    { tipo: "SAS", campo: "Preocupação" },
+    { tipo: "ACSI-28", campo: "Preocupação" },
+  ],
+  "Concentração": [
+    { tipo: "SAS", campo: "Concentração" },
+    { tipo: "ACSI-28", campo: "Concentração" },
+  ],
+  "Enfrentamento de Adversidade": [
+    { tipo: "ACSI-28", campo: "Adversidade" },
+    { tipo: "RESILIÊNCIA ESPORTIVA", campo: "Recuperação de Adversidades" },
+  ],
+  "Persistência e Adaptação": [{ tipo: "RESILIÊNCIA ESPORTIVA", campo: "Persistência e Adaptação" }],
+  "Pressão Competitiva": [{ tipo: "ACSI-28", campo: "Pressão" }],
+  "Definição de Metas": [{ tipo: "ACSI-28", campo: "Metas" }],
+  "Treinabilidade": [{ tipo: "ACSI-28", campo: "Treinabilidade" }],
+  "Imagem Mental — Cognitiva": [{ tipo: "SIQ — IMAGEM MENTAL", campo: "Imagem Cognitiva" }],
+  "Imagem Mental — Motivacional": [{ tipo: "SIQ — IMAGEM MENTAL", campo: "Imagem Motivacional" }],
+  "Controle Emocional": [{ tipo: "SIQ — IMAGEM MENTAL", campo: "Controle Emocional" }],
+  "Suporte da Família": [{ tipo: "SUPORTE SOCIAL PERCEBIDO", campo: "Suporte da Família" }],
+  "Suporte do Treinador": [{ tipo: "SUPORTE SOCIAL PERCEBIDO", campo: "Suporte do Treinador" }],
+  "Suporte dos Colegas": [{ tipo: "SUPORTE SOCIAL PERCEBIDO", campo: "Suporte dos Colegas" }],
+  "Tempo de Reação": [
+    { tipo: "TEMPO DE REAÇÃO", campo: "TR médio (ms)" },
+    { tipo: "GO / NO-GO", campo: "TR médio (ms)" },
+    { tipo: "TESTE DE STROOP", campo: "TR médio (ms)" },
+  ],
+  "Atenção": [
+    { tipo: "TESTE DE ATENÇÃO VISUAL", campo: "Precisão" },
+    { tipo: "GO / NO-GO", campo: "Acertos" },
+  ],
+  "Controle Inibitório": [{ tipo: "GO / NO-GO", campo: "Falsos alarmes" }],
+  "Memória": [
+    { tipo: "MEMÓRIA DE LISTA DE PALAVRAS", campo: "Percentual" },
+    { tipo: "N-BACK — 2-BACK", campo: "Acertos" },
+  ],
+  "Raciocínio Lógico": [{ tipo: "MATRIZES PROGRESSIVAS", campo: "Percentual" }],
+  "Função Executiva / Flexibilidade": [
+    { tipo: "TESTE DE STROOP", campo: "Custo interferência (ms)" },
+    { tipo: "TRAIL MAKING TEST", campo: "Tempo Parte B (s)" },
+  ],
+};
+
+/** Todos os construtos para os quais existe pelo menos 1 registro no banco. */
+function construtosDisponiveis(dados) {
+  const tiposExistentes = new Set(Object.values(dados.psiData).flat().map((r) => r.tipo));
+  return Object.keys(CONSTRUCTOS_PSI).filter((construto) =>
+    CONSTRUCTOS_PSI[construto].some((fonte) => tiposExistentes.has(fonte.tipo))
+  );
+}
+
+/** Fontes (instrumentos) de um construto que realmente têm dado no banco. */
+function fontesDoConstruto(dados, construto) {
+  const tiposExistentes = new Set(Object.values(dados.psiData).flat().map((r) => r.tipo));
+  return (CONSTRUCTOS_PSI[construto] || []).filter((f) => tiposExistentes.has(f.tipo));
+}
+
+/** Valor mais recente de um atleta para um construto, entre todas as fontes que ele tiver. */
+function valorConstrutoAtleta(dados, atletaId, construto) {
+  const fontes = CONSTRUCTOS_PSI[construto] || [];
+  let melhor = null;
+  fontes.forEach(({ tipo, campo }) => {
+    (dados.psiData[atletaId] || []).filter((r) => r.tipo === tipo).forEach((r) => {
+      const v = parseNota(r.nota, r.tipo).campos[campo];
+      if (typeof v === "number" && (!melhor || r.data > melhor.data)) {
+        melhor = { valor: v, data: r.data, instrumento: tipo, campo };
+      }
+    });
+  });
+  return melhor;
+}
+
+/** Todo o histórico (todas as datas) de um atleta para um construto, agrupado por instrumento. */
+function historicoConstrutoAtleta(dados, atletaId, construto) {
+  const fontes = CONSTRUCTOS_PSI[construto] || [];
+  const porInstrumento = {};
+  fontes.forEach(({ tipo, campo }) => {
+    (dados.psiData[atletaId] || []).filter((r) => r.tipo === tipo).forEach((r) => {
+      const v = parseNota(r.nota, r.tipo).campos[campo];
+      if (typeof v === "number") {
+        if (!porInstrumento[tipo]) porInstrumento[tipo] = [];
+        porInstrumento[tipo].push({ data: r.data, valor: v });
+      }
+    });
+  });
+  Object.values(porInstrumento).forEach((lista) => lista.sort((a, b) => a.data.localeCompare(b.data)));
+  return porInstrumento;
+}
+
+function DadosPorConstruto({ dados }) {
   const { useState } = React;
 
-  const instrumentos = Array.from(new Set(Object.values(dados.psiData).flat().map(r => r.tipo))).sort();
-  const [instrumento, setInstrumento] = useState(instrumentos[0] || "");
+  const construtos = construtosDisponiveis(dados);
+  const [construto, setConstruto] = useState(construtos[0] || "");
+  const fontes = fontesDoConstruto(dados, construto);
 
   const registros = dados.atletas
-    .map(a => {
-      const reg = (dados.psiData[a.id] || []).find(r => r.tipo === instrumento);
-      if (!reg) return null;
-      return { atleta: a.nome, campos: parseNota(reg.nota).campos, data: reg.data };
+    .map((a) => {
+      const porFonte = {};
+      fontes.forEach(({ tipo, campo }) => {
+        const reg = (dados.psiData[a.id] || []).filter((r) => r.tipo === tipo).sort((x, y) => y.data.localeCompare(x.data))[0];
+        if (reg) {
+          const v = parseNota(reg.nota, reg.tipo).campos[campo];
+          if (typeof v === "number") porFonte[tipo] = v;
+        }
+      });
+      if (Object.keys(porFonte).length === 0) return null;
+      return { atleta: a.nome, porFonte };
     })
     .filter(Boolean);
 
-  const subescalas = registros.length
-    ? Object.keys(registros[0].campos).filter(k => typeof registros[0].campos[k] === "number")
-    : [];
-
-  const labels = registros.map(r => r.atleta);
-  const datasets = subescalas.map((sub, i) => ({
-    label: sub,
+  const labels = registros.map((r) => r.atleta);
+  const datasets = fontes.map((f, i) => ({
+    label: f.tipo,
     backgroundColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length],
-    data: registros.map(r => (typeof r.campos[sub] === "number" ? r.campos[sub] : 0)),
+    data: registros.map((r) => (typeof r.porFonte[f.tipo] === "number" ? r.porFonte[f.tipo] : null)),
   }));
 
-  if (instrumentos.length === 0) {
+  if (construtos.length === 0) {
     return <div className="empty-state">Nenhum dado de psicologia lançado ainda.</div>;
   }
 
   return (
     <div>
       <div className="chart-controls">
-        <TabSelect opcoes={instrumentos} valor={instrumento} onChange={setInstrumento} />
-        <span className="chart-controls-note">{registros.length} atleta{registros.length === 1 ? "" : "s"} com registro deste instrumento (valor mais recente de cada um)</span>
+        <TabSelect opcoes={construtos} valor={construto} onChange={setConstruto} />
+        <span className="chart-controls-note">
+          {fontes.length > 1
+            ? `Medido por ${fontes.length} instrumentos diferentes (${fontes.map(f => f.tipo).join(", ")}) — barras separadas por instrumento, sem misturar escalas.`
+            : fontes[0] ? `Fonte: ${fontes[0].tipo}` : ""}
+        </span>
       </div>
       {registros.length === 0 ? (
-        <div className="empty-state">Nenhum atleta com esse instrumento lançado.</div>
+        <div className="empty-state">Nenhum atleta com esse construto lançado.</div>
       ) : (
-        <div className="chart-box chart-box-wide">
+        <div className="chart-box-wide">
           <canvas ref={el => renderizarBarras(el, labels, datasets)}></canvas>
         </div>
       )}
@@ -814,11 +942,12 @@ function DadosPorInstrumento({ dados }) {
   );
 }
 
+
 function DadosPorEstatistica({ dados }) {
   const { useState } = React;
 
   const stats = Array.from(new Set(
-    Object.values(dados.perfData).flat().flatMap(r => Object.keys(parseNota(r.nota).campos))
+    Object.values(dados.perfData).flat().flatMap(r => Object.keys(parseNota(r.nota, r.tipo).campos))
   )).sort();
   const [stat, setStat] = useState(stats.includes("AÇÃO COM BOLA") ? "AÇÃO COM BOLA" : (stats[0] || ""));
 
@@ -877,16 +1006,14 @@ function renderizarBarras(canvas, labels, datasets) {
 
 function EixoPicker({ label, dados, config, onChange }) {
   const areas = ["Psicologia", "Performance"];
-  const instrumentos = instrumentosPsi(dados);
+  const construtos = construtosDisponiveis(dados);
   const stats = estatisticasPerformance(dados);
-  const subcampos = config.area === "Psicologia" && config.instrumento ? subcamposDoInstrumento(dados, config.instrumento) : [];
 
   function setArea(area) {
     if (area === "Psicologia") {
-      const inst = instrumentos[0] || "";
-      onChange({ area, instrumento: inst, subcampo: subcamposDoInstrumento(dados, inst)[0] || "", estatistica: "" });
+      onChange({ area, construto: construtos[0] || "", estatistica: "" });
     } else {
-      onChange({ area, instrumento: "", subcampo: "", estatistica: stats[0] || "" });
+      onChange({ area, construto: "", estatistica: stats[0] || "" });
     }
   }
 
@@ -895,17 +1022,7 @@ function EixoPicker({ label, dados, config, onChange }) {
       <div className="eixo-label">{label}</div>
       <TabSelect opcoes={areas} valor={config.area} onChange={setArea} tamanho="sm" />
       {config.area === "Psicologia" ? (
-        <React.Fragment>
-          <TabSelect
-            opcoes={instrumentos}
-            valor={config.instrumento}
-            onChange={(inst) => onChange({ ...config, instrumento: inst, subcampo: subcamposDoInstrumento(dados, inst)[0] || "" })}
-            tamanho="sm"
-          />
-          {subcampos.length > 0 && (
-            <TabSelect opcoes={subcampos} valor={config.subcampo} onChange={(s) => onChange({ ...config, subcampo: s })} tamanho="sm" />
-          )}
-        </React.Fragment>
+        <TabSelect opcoes={construtos} valor={config.construto} onChange={(c) => onChange({ ...config, construto: c })} tamanho="sm" />
       ) : (
         <TabSelect opcoes={stats} valor={config.estatistica} onChange={(e) => onChange({ ...config, estatistica: e })} tamanho="sm" />
       )}
@@ -914,30 +1031,31 @@ function EixoPicker({ label, dados, config, onChange }) {
 }
 
 function valorDoEixo(dados, atletaId, config) {
-  if (config.area === "Psicologia") return valorPsi(dados, atletaId, config.instrumento, config.subcampo);
+  if (config.area === "Psicologia") {
+    const r = valorConstrutoAtleta(dados, atletaId, config.construto);
+    return r ? r.valor : null;
+  }
   return valorPerformance(dados, atletaId, config.estatistica);
 }
 
 function labelDoEixo(config) {
-  if (config.area === "Psicologia") return `${config.instrumento} — ${config.subcampo}`;
+  if (config.area === "Psicologia") return config.construto;
   return config.estatistica;
 }
 
 function CruzamentoDados({ dados }) {
   const { useState, useRef, useEffect } = React;
-  const instrumentosIniciais = instrumentosPsi(dados);
+  const construtosIniciais = construtosDisponiveis(dados);
   const statsIniciais = estatisticasPerformance(dados);
 
   const [eixoX, setEixoX] = useState({
     area: "Psicologia",
-    instrumento: instrumentosIniciais[0] || "",
-    subcampo: subcamposDoInstrumento(dados, instrumentosIniciais[0] || "")[0] || "",
+    construto: construtosIniciais[0] || "",
     estatistica: "",
   });
   const [eixoY, setEixoY] = useState({
     area: "Performance",
-    instrumento: "",
-    subcampo: "",
+    construto: "",
     estatistica: statsIniciais[0] || "",
   });
 
@@ -949,7 +1067,9 @@ function CruzamentoDados({ dados }) {
       const x = valorDoEixo(dados, a.id, eixoX);
       const y = valorDoEixo(dados, a.id, eixoY);
       if (typeof x !== "number" || typeof y !== "number") return null;
-      return { x, y, nome: a.nome };
+      const fonteX = eixoX.area === "Psicologia" ? (valorConstrutoAtleta(dados, a.id, eixoX.construto) || {}).instrumento : null;
+      const fonteY = eixoY.area === "Psicologia" ? (valorConstrutoAtleta(dados, a.id, eixoY.construto) || {}).instrumento : null;
+      return { x, y, nome: a.nome, fonteX, fonteY };
     })
     .filter(Boolean);
 
@@ -976,7 +1096,12 @@ function CruzamentoDados({ dados }) {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (ctx) => `${ctx.raw.nome}: ${labelDoEixo(eixoX)} = ${ctx.raw.x}, ${labelDoEixo(eixoY)} = ${ctx.raw.y}`,
+              label: (ctx) => {
+                const p = ctx.raw;
+                const partX = p.fonteX ? `${labelDoEixo(eixoX)} (${p.fonteX}) = ${p.x}` : `${labelDoEixo(eixoX)} = ${p.x}`;
+                const partY = p.fonteY ? `${labelDoEixo(eixoY)} (${p.fonteY}) = ${p.y}` : `${labelDoEixo(eixoY)} = ${p.y}`;
+                return `${p.nome}: ${partX}, ${partY}`;
+              },
             },
           },
         },
@@ -1081,9 +1206,9 @@ function Dashboard({ dados, onOpenAtleta }) {
       </div>
 
       <div className="panel">
-        <div className="panel-head"><h3>Dados de psicologia por instrumento</h3></div>
+        <div className="panel-head"><h3>Dados de psicologia por construto</h3></div>
         <div className="panel-body" style={{padding:"14px 20px 20px"}}>
-          <DadosPorInstrumento dados={dados} />
+          <DadosPorConstruto dados={dados} />
         </div>
       </div>
 
@@ -1182,36 +1307,38 @@ function TimelineAtleta({ atletaId, dados }) {
 
 function EvolucaoPsiAtleta({ dados, atletaId }) {
   const { useState, useRef, useEffect } = React;
-  const registrosAtleta = dados.psiData[atletaId] || [];
-  const instrumentos = Array.from(new Set(registrosAtleta.map((r) => r.tipo))).sort();
-  const [instrumento, setInstrumento] = useState(instrumentos[0] || "");
+
+  const construtos = Object.keys(CONSTRUCTOS_PSI).filter((c) =>
+    CONSTRUCTOS_PSI[c].some((f) => (dados.psiData[atletaId] || []).some((r) => r.tipo === f.tipo))
+  );
+  const [construto, setConstruto] = useState(construtos[0] || "");
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
-  const historico = registrosAtleta
-    .filter((r) => r.tipo === instrumento)
-    .map((r) => ({ data: r.data, campos: parseNota(r.nota).campos }))
-    .sort((a, b) => a.data.localeCompare(b.data));
-
-  const subescalas = historico.length
-    ? Object.keys(historico[0].campos).filter((k) => typeof historico[0].campos[k] === "number")
-    : [];
+  const porInstrumento = historicoConstrutoAtleta(dados, atletaId, construto);
+  const instrumentosComDado = Object.keys(porInstrumento);
+  const datasUnicas = Array.from(new Set(instrumentosComDado.flatMap((t) => porInstrumento[t].map((p) => p.data)))).sort();
 
   useEffect(() => {
-    if (!canvasRef.current || historico.length === 0) return;
+    if (!canvasRef.current || datasUnicas.length === 0) return;
     if (chartRef.current) chartRef.current.destroy();
     chartRef.current = new Chart(canvasRef.current, {
       type: "line",
       data: {
-        labels: historico.map((h) => formatarData(h.data)),
-        datasets: subescalas.map((sub, i) => ({
-          label: sub,
-          data: historico.map((h) => (typeof h.campos[sub] === "number" ? h.campos[sub] : null)),
-          borderColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length],
-          backgroundColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length] + "33",
-          tension: 0.25,
-          pointRadius: 4,
-        })),
+        labels: datasUnicas.map(formatarData),
+        datasets: instrumentosComDado.map((tipo, i) => {
+          const mapa = {};
+          porInstrumento[tipo].forEach((p) => { mapa[p.data] = p.valor; });
+          return {
+            label: tipo,
+            data: datasUnicas.map((d) => (d in mapa ? mapa[d] : null)),
+            borderColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length],
+            backgroundColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length] + "33",
+            tension: 0.25,
+            pointRadius: 4,
+            spanGaps: true,
+          };
+        }),
       },
       options: {
         responsive: true,
@@ -1219,23 +1346,25 @@ function EvolucaoPsiAtleta({ dados, atletaId }) {
         plugins: { legend: { labels: { font: { size: 10.5 } } } },
         scales: {
           x: { ticks: { font: { size: 10.5 } } },
-          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+          y: { ticks: { font: { size: 10.5 } } },
         },
       },
     });
     return () => { if (chartRef.current) chartRef.current.destroy(); };
-  }, [instrumento, JSON.stringify(historico)]);
+  }, [construto, JSON.stringify(porInstrumento)]);
 
-  if (instrumentos.length === 0) return <div className="empty-state">Nenhum dado de psicologia para este atleta ainda.</div>;
+  if (construtos.length === 0) return <div className="empty-state">Nenhum dado de psicologia para este atleta ainda.</div>;
 
   return (
     <div>
       <div className="chart-controls">
-        <TabSelect opcoes={instrumentos} valor={instrumento} onChange={setInstrumento} />
-        <span className="chart-controls-note">{historico.length} avaliaç{historico.length === 1 ? "ão" : "ões"} ao longo do tempo</span>
+        <TabSelect opcoes={construtos} valor={construto} onChange={setConstruto} />
+        <span className="chart-controls-note">
+          {instrumentosComDado.length > 1 ? `Fontes: ${instrumentosComDado.join(", ")} — cada uma com sua própria linha (escalas diferentes)` : (instrumentosComDado[0] || "")}
+        </span>
       </div>
-      {historico.length === 0 ? (
-        <div className="empty-state">Sem histórico para esse instrumento.</div>
+      {datasUnicas.length === 0 ? (
+        <div className="empty-state">Sem histórico para esse construto.</div>
       ) : (
         <div className="chart-box-wide"><canvas ref={canvasRef}></canvas></div>
       )}
