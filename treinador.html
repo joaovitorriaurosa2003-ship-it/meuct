@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Treinadores — CT Integrado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root{
+  --navy: #0A1F35;
+  --navy-2: #0F2A47;
+  --navy-3: #16385B;
+  --gold: #B8976A;
+  --gold-soft: #D8C4A4;
+  --paper: #F5F2EC;
+  --ink: #1B1F24;
+  --muted: #7C8794;
+  --line: rgba(255,255,255,0.10);
+  --line-soft: rgba(10,31,53,0.10);
+  --verde: #4C8B63;
+  --verde-bg: rgba(76,139,99,0.14);
+  --amarelo: #B5883A;
+  --amarelo-bg: rgba(181,136,58,0.14);
+  --vermelho: #A6473C;
+  --vermelho-bg: rgba(166,71,60,0.14);
+  --radius: 10px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:'Barlow', system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing:antialiased;
+}
+#root{min-height:100vh;}
+h1,h2,h3,h4{font-family:'Barlow Condensed','Barlow',sans-serif; margin:0; letter-spacing:0.01em;}
+button{font-family:inherit;}
+input,select,textarea{font-family:inherit;}
+
+/* ---------- Barra de hub (topo, presente em toda página) ---------- */
+.hubbar{
+  background: linear-gradient(90deg, var(--navy) 0%, var(--navy-2) 100%);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 24px; height:60px; position:sticky; top:0; z-index:40;
+  box-shadow:0 2px 10px rgba(10,31,53,0.15);
+}
+.hubbar-left{display:flex; align-items:center; gap:22px;}
+.hubbar-brand{display:flex; align-items:center; gap:9px;}
+.hubbar-brand .k{color:#fff; font-weight:800; font-size:15px; letter-spacing:0.02em;}
+.hubbar-tabs{display:flex; align-items:center; gap:2px;}
+.hubbar-tab{
+  display:flex; align-items:center; gap:7px;
+  padding:9px 14px; border-radius:8px; font-size:13.5px; font-weight:600;
+  color:rgba(255,255,255,0.62); text-decoration:none; transition:background .12s ease, color .12s ease;
+}
+.hubbar-tab:hover{color:#fff; background:rgba(255,255,255,0.06);}
+.hubbar-tab.active{color:#fff; background:rgba(184,151,106,0.20);}
+.hubbar-tab .dot{width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.6;}
+.hubbar-right{display:flex; align-items:center; gap:10px;}
+.admin-badge{
+  display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:100px;
+  background:rgba(184,151,106,0.16); border:1px solid rgba(184,151,106,0.35);
+}
+.admin-badge .avatar{
+  width:22px; height:22px; border-radius:50%; background:var(--gold); color:var(--navy);
+  display:flex; align-items:center; justify-content:center; font-weight:800; font-size:10.5px;
+}
+.admin-badge .label{font-size:12px; font-weight:700; color:var(--gold-soft); letter-spacing:0.02em;}
+
+/* ---------- Área de conteúdo ---------- */
+.page{padding:28px 32px 60px; max-width:1180px; margin:0 auto;}
+.page-head{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:22px; gap:16px;}
+.page-head h1{font-size:25px; font-weight:700; color:var(--navy);}
+.page-head .crumb{font-size:12.5px; color:var(--muted); margin-top:4px; font-weight:500;}
+
+/* ---------- Cards / KPIs ---------- */
+.kpi-row{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:26px;}
+.kpi-card{background:#fff; border:1px solid var(--line-soft); border-radius:var(--radius); padding:16px 18px;}
+.kpi-card .label{font-size:12px; color:var(--muted); font-weight:600; margin-bottom:8px;}
+.kpi-card .value{font-size:28px; font-weight:700; color:var(--navy); font-family:'Barlow Condensed';}
+.kpi-card .value.verde{color:var(--verde);}
+.kpi-card .value.amarelo{color:var(--amarelo);}
+.kpi-card .value.vermelho{color:var(--vermelho);}
+
+.panel{background:#fff; border:1px solid var(--line-soft); border-radius:var(--radius); margin-bottom:20px; overflow:hidden;}
+.panel-head{padding:16px 20px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; justify-content:space-between;}
+.panel-head h3{font-size:17px; color:var(--navy); font-weight:700;}
+.panel-body{padding:6px 0;}
+
+/* ---------- Semáforo grid ---------- */
+.athlete-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; padding:18px 20px;}
+.athlete-card{border:1px solid var(--line-soft); border-radius:9px; padding:14px 15px; cursor:pointer; transition:transform .1s ease, box-shadow .1s ease; position:relative;}
+.athlete-card:hover{transform:translateY(-1px); box-shadow:0 4px 14px rgba(10,31,53,0.08);}
+.athlete-card .sinal{position:absolute; top:14px; right:14px; width:10px; height:10px; border-radius:50%;}
+.athlete-card .sinal.verde{background:var(--verde);}
+.athlete-card .sinal.amarelo{background:var(--amarelo);}
+.athlete-card .sinal.vermelho{background:var(--vermelho);}
+.athlete-card .nome{font-weight:700; color:var(--navy); font-size:15.5px; margin-bottom:2px; padding-right:20px;}
+.athlete-card .cat{font-size:12px; color:var(--muted); margin-bottom:10px;}
+.athlete-card .flags{display:flex; flex-wrap:wrap; gap:5px;}
+.flag{font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:100px;}
+.flag.psi{background:rgba(139,109,224,0.12); color:#6E56C8;}
+.flag.fisio{background:rgba(58,138,161,0.12); color:#2E7A93;}
+.flag.social{background:rgba(181,136,58,0.14); color:var(--amarelo);}
+.flag.performance{background:rgba(166,71,60,0.12); color:#A6473C;}
+.flag.ok{background:var(--verde-bg); color:var(--verde);}
+
+/* ---------- Table ---------- */
+table{width:100%; border-collapse:collapse; font-size:14px;}
+thead th{text-align:left; font-size:11.5px; color:var(--muted); font-weight:600; padding:10px 20px; border-bottom:1px solid var(--line-soft);}
+tbody td{padding:12px 20px; border-bottom:1px solid var(--line-soft); color:var(--ink); vertical-align:top;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr.clickable{cursor:pointer;}
+tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
+.badge{font-size:11px; font-weight:600; padding:3px 9px; border-radius:100px; display:inline-block;}
+.badge.verde{background:var(--verde-bg); color:var(--verde);}
+.badge.amarelo{background:var(--amarelo-bg); color:var(--amarelo);}
+.badge.vermelho{background:var(--vermelho-bg); color:var(--vermelho);}
+.badge.neutro{background:rgba(10,31,53,0.06); color:var(--navy);}
+
+/* ---------- Timeline ---------- */
+.timeline{padding:22px 24px;}
+.tl-item{display:flex; gap:14px; margin-bottom:2px;}
+.tl-rail{display:flex; flex-direction:column; align-items:center; width:16px; flex-shrink:0;}
+.tl-dot{width:10px; height:10px; border-radius:50%; margin-top:5px; flex-shrink:0;}
+.tl-dot.psi{background:#6E56C8;}
+.tl-dot.fisio{background:#2E7A93;}
+.tl-dot.social{background:var(--amarelo);}
+.tl-dot.performance{background:#A6473C;}
+.tl-line{flex:1; width:1.5px; background:var(--line-soft); margin-top:2px;}
+.tl-body{padding-bottom:22px; flex:1;}
+.tl-date{font-size:11.5px; color:var(--muted); font-weight:600; margin-bottom:2px;}
+.tl-area{font-size:10.5px; font-weight:700; letter-spacing:0.03em; text-transform:uppercase;}
+.tl-area.psi{color:#6E56C8;}
+.tl-area.fisio{color:#2E7A93;}
+.tl-area.social{color:var(--amarelo);}
+.tl-area.performance{color:#A6473C;}
+.tl-desc{font-size:14px; color:var(--ink); margin-top:3px; line-height:1.45;}
+
+/* ---------- Perfil do atleta ---------- */
+.profile-head{display:flex; align-items:center; gap:16px; margin-bottom:22px;}
+.profile-avatar{width:56px; height:56px; border-radius:50%; background:var(--navy); color:var(--gold-soft); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:20px; flex-shrink:0;}
+.profile-name{font-size:24px; font-weight:700; color:var(--navy);}
+.profile-meta{font-size:13px; color:var(--muted); margin-top:2px; font-weight:500;}
+.back-link{display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--muted); cursor:pointer; margin-bottom:16px; font-weight:600; background:none; border:none; padding:0;}
+.back-link:hover{color:var(--navy);}
+
+.access-note{font-size:12.5px; color:var(--muted); background:rgba(10,31,53,0.035); border:1px solid var(--line-soft); border-radius:8px; padding:10px 14px; margin-bottom:18px; display:flex; align-items:flex-start; gap:8px; line-height:1.5;}
+.access-note b{color:var(--navy);}
+.access-note.admin{background:rgba(184,151,106,0.08); border-color:rgba(184,151,106,0.3);}
+
+/* ---------- Formulário ---------- */
+.form-panel{padding:18px 20px 20px; border-top:1px solid var(--line-soft); background:rgba(10,31,53,0.015);}
+.form-grid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
+.form-grid.full{grid-template-columns:1fr;}
+.field{display:flex; flex-direction:column; gap:6px;}
+.field label{font-size:12px; font-weight:600; color:var(--navy);}
+.field select, .field input[type=date], .field input[type=text]{padding:9px 11px; border:1px solid var(--line-soft); border-radius:7px; font-size:13.5px; color:var(--ink); background:#fff;}
+.field textarea{padding:9px 11px; border:1px solid var(--line-soft); border-radius:7px; font-size:13.5px; color:var(--ink); resize:vertical; min-height:64px; font-family:inherit; background:#fff;}
+.field select:focus, .field input:focus, .field textarea:focus{outline:none; border-color:var(--gold);}
+.sinal-picker{display:flex; gap:8px;}
+.sinal-opt{flex:1; text-align:center; padding:8px 6px; border-radius:7px; border:1.5px solid var(--line-soft); font-size:12.5px; font-weight:600; cursor:pointer; color:var(--muted);}
+.sinal-opt.verde.on{border-color:var(--verde); background:var(--verde-bg); color:var(--verde);}
+.sinal-opt.amarelo.on{border-color:var(--amarelo); background:var(--amarelo-bg); color:var(--amarelo);}
+.sinal-opt.vermelho.on{border-color:var(--vermelho); background:var(--vermelho-bg); color:var(--vermelho);}
+.form-actions{display:flex; justify-content:flex-end; gap:10px;}
+.save-note{font-size:11.5px; color:var(--muted); margin-top:10px; display:flex; gap:6px; align-items:flex-start;}
+.toast{position:fixed; bottom:24px; right:24px; background:var(--navy); color:#fff; padding:12px 18px; border-radius:9px; font-size:13.5px; font-weight:600; box-shadow:0 8px 24px rgba(10,31,53,0.28); z-index:50; display:flex; align-items:center; gap:8px;}
+.toast .dot{width:7px; height:7px; border-radius:50%; background:var(--verde);}
+
+/* ---------- Utilidades ---------- */
+.muted{color:var(--muted);}
+.empty-state{padding:40px 20px; text-align:center; color:var(--muted); font-size:14px;}
+.pill-btn{padding:7px 14px; border-radius:8px; border:1px solid var(--line-soft); background:#fff; color:var(--navy); font-size:13px; font-weight:600; cursor:pointer;}
+.pill-btn:hover{border-color:var(--gold);}
+.pill-btn.primary{background:var(--navy); color:#fff; border-color:var(--navy);}
+.pill-btn.primary:hover{background:var(--navy-3);}
+.pill-btn:disabled{opacity:.5; cursor:not-allowed;}
+
+@media (max-width: 900px){
+  .kpi-row{grid-template-columns:repeat(2,1fr);}
+  .page{padding:20px 16px;}
+  .hubbar{padding:0 14px;}
+  .hubbar-tabs{display:none;}
+  .form-grid{grid-template-columns:1fr;}
+}
+
+
+/* ---------- Chatbot de ajuda ---------- */
+.chat-fab{
+  position:fixed; bottom:24px; right:24px; width:52px; height:52px; border-radius:50%;
+  background:var(--navy); color:var(--gold-soft); border:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; box-shadow:0 8px 22px rgba(10,31,53,0.28);
+  z-index:60; transition:transform .12s ease;
+}
+.chat-fab:hover{transform:scale(1.05);}
+.chat-panel{
+  position:fixed; bottom:88px; right:24px; width:340px; max-width:calc(100vw - 32px);
+  height:460px; max-height:calc(100vh - 120px); background:#fff; border-radius:14px;
+  box-shadow:0 16px 44px rgba(10,31,53,0.28); border:1px solid var(--line-soft);
+  display:flex; flex-direction:column; overflow:hidden; z-index:60;
+}
+.chat-head{
+  background:var(--navy); color:#fff; padding:14px 16px; display:flex; align-items:center; justify-content:space-between;
+  flex-shrink:0;
+}
+.chat-head .title{font-size:14px; font-weight:700;}
+.chat-head .sub{font-size:11px; color:var(--gold-soft); margin-top:1px;}
+.chat-head button{background:none; border:none; color:rgba(255,255,255,0.7); cursor:pointer; font-size:18px; line-height:1; padding:2px 4px;}
+.chat-head button:hover{color:#fff;}
+.chat-body{flex:1; overflow-y:auto; padding:14px 14px 6px; display:flex; flex-direction:column; gap:10px;}
+.chat-msg{max-width:85%; padding:9px 12px; border-radius:11px; font-size:13px; line-height:1.5; white-space:pre-wrap;}
+.chat-msg.assistant{background:rgba(10,31,53,0.05); color:var(--ink); align-self:flex-start; border-bottom-left-radius:3px;}
+.chat-msg.user{background:var(--navy); color:#fff; align-self:flex-end; border-bottom-right-radius:3px;}
+.chat-msg.loading{color:var(--muted); font-style:italic;}
+.chat-input-row{display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--line-soft); flex-shrink:0;}
+.chat-input-row input{
+  flex:1; padding:9px 11px; border:1px solid var(--line-soft); border-radius:8px; font-size:13px;
+  font-family:inherit; color:var(--ink);
+}
+.chat-input-row input:focus{outline:none; border-color:var(--gold);}
+.chat-input-row button{
+  background:var(--navy); color:#fff; border:none; border-radius:8px; padding:0 14px; font-size:13px;
+  font-weight:600; cursor:pointer; flex-shrink:0;
+}
+.chat-input-row button:disabled{opacity:.5; cursor:not-allowed;}
+@media (max-width: 480px){
+  .chat-panel{right:16px; left:16px; width:auto;}
+  .chat-fab{right:16px;}
+}
+
+
+
+/* ---------- Painel comparativo (gráficos) ---------- */
+.charts-row{display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:18px 20px;}
+.chart-box{border:1px solid var(--line-soft); border-radius:9px; padding:14px 16px; background:#fff;}
+.chart-box h4{font-size:13px; color:var(--navy); font-weight:700; margin-bottom:10px;}
+.chart-box canvas{max-height:220px;}
+@media (max-width: 900px){ .charts-row{grid-template-columns:1fr;} }
+
+/* ---------- Elenco — tema campo de futebol ---------- */
+.pitch-panel{
+  border-radius:var(--radius); margin-bottom:20px; overflow:hidden;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.045) 0px, rgba(255,255,255,0.045) 40px, transparent 40px, transparent 80px),
+    radial-gradient(circle at 50% 50%, #1c5c3a 0%, #164a2f 70%),
+    linear-gradient(180deg, #1c5c3a, #123f27);
+  border:1px solid rgba(255,255,255,0.08);
+  position:relative;
+}
+.pitch-panel .pitch-head{
+  padding:16px 20px; display:flex; align-items:center; justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,0.14);
+  background:rgba(10,31,53,0.25);
+}
+.pitch-panel .pitch-head h3{font-size:17px; color:#fff; font-weight:700;}
+.pitch-panel .pitch-head .sub{font-size:11.5px; color:rgba(255,255,255,0.6); margin-top:2px;}
+.pitch-markings{
+  position:absolute; top:56px; left:50%; transform:translateX(-50%);
+  width:120px; height:120px; border:2px solid rgba(255,255,255,0.10); border-radius:50%;
+  pointer-events:none;
+}
+.jersey-grid{
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:14px;
+  padding:22px 20px; position:relative; z-index:1;
+}
+.jersey-btn{
+  background:rgba(255,255,255,0.06); border:1.5px solid rgba(255,255,255,0.14); border-radius:12px;
+  padding:14px 10px 12px; cursor:pointer; text-align:center; transition:transform .12s ease, background .12s ease;
+  position:relative; backdrop-filter:blur(2px);
+}
+.jersey-btn:hover{transform:translateY(-2px); background:rgba(255,255,255,0.11);}
+.jersey-badge{
+  width:44px; height:44px; margin:0 auto 8px; border-radius:9px;
+  background:linear-gradient(160deg, var(--gold) 0%, #967650 100%);
+  color:var(--navy); font-weight:800; font-size:15px; letter-spacing:-0.02em;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 3px 8px rgba(0,0,0,0.25);
+}
+.jersey-nome{font-size:12.5px; font-weight:700; color:#fff; line-height:1.3; margin-bottom:2px;}
+.jersey-cat{font-size:10.5px; color:rgba(255,255,255,0.55); margin-bottom:8px;}
+.jersey-sinal{
+  position:absolute; top:8px; right:8px; width:9px; height:9px; border-radius:50%;
+  box-shadow:0 0 0 2px rgba(255,255,255,0.15);
+}
+.jersey-sinal.verde{background:#5FE0A5;}
+.jersey-sinal.amarelo{background:#E0C15F;}
+.jersey-sinal.vermelho{background:#E0715F;}
+.jersey-stats{display:flex; justify-content:center; gap:6px; flex-wrap:wrap;}
+.jersey-stat{
+  font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:100px;
+  background:rgba(255,255,255,0.10); color:rgba(255,255,255,0.85);
+}
+
+/* ---------- Controles de gráfico por instrumento/estatística ---------- */
+.chart-controls{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+.chart-controls label{font-size:12.5px; font-weight:600; color:var(--navy);}
+.chart-controls select{padding:7px 10px; border:1px solid var(--line-soft); border-radius:7px; font-size:13px; color:var(--ink); background:#fff;}
+.chart-controls-note{font-size:11.5px; color:var(--muted);}
+.chart-box-wide{border:1px solid var(--line-soft); border-radius:9px; padding:16px; background:#fff; height:320px;}
+
+/* ---------- Abas de filtro (substituem <select>) ---------- */
+.tab-select{display:flex; flex-wrap:wrap; gap:6px;}
+.tab-select-item{
+  padding:7px 13px; border-radius:100px; border:1.5px solid var(--line-soft); background:#fff;
+  color:var(--muted); font-size:12.5px; font-weight:600; cursor:pointer; transition:all .12s ease;
+}
+.tab-select-item:hover{border-color:var(--gold); color:var(--navy);}
+.tab-select-item.active{background:var(--navy); border-color:var(--navy); color:#fff;}
+.tab-select-sm .tab-select-item{padding:5px 11px; font-size:11.5px;}
+
+/* ---------- Cruzamento de dados ---------- */
+.cruzamento-eixos{display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap;}
+.eixo-picker{flex:1; min-width:220px; display:flex; flex-direction:column; gap:8px; background:rgba(10,31,53,0.02); border:1px solid var(--line-soft); border-radius:9px; padding:14px;}
+.eixo-label{font-size:11px; font-weight:700; color:var(--gold); text-transform:uppercase; letter-spacing:0.04em;}
+.cruzamento-x{font-size:20px; font-weight:700; color:var(--muted); padding-top:34px; flex-shrink:0;}
+@media (max-width: 700px){ .cruzamento-eixos{flex-direction:column;} .cruzamento-x{padding-top:0; text-align:center;} }
+
+/* ---------- Ficha do atleta ---------- */
+.ficha-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; padding:16px 20px;}
+.ficha-item{background:rgba(10,31,53,0.025); border-radius:8px; padding:10px 12px;}
+.ficha-label{font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:4px;}
+.ficha-valor{font-size:14px; font-weight:600; color:var(--navy);}
+.ficha-clubes{padding:0 20px 18px;}
+.clube-lista{display:flex; flex-direction:column; gap:6px;}
+.clube-item{display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(10,31,53,0.025); border-radius:7px; font-size:13px;}
+.clube-nome{font-weight:600; color:var(--navy);}
+.clube-periodo{color:var(--muted); font-size:12px;}
+.clube-row{display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:8px; margin-bottom:8px; align-items:center;}
+.clube-row input{padding:8px 10px; border:1px solid var(--line-soft); border-radius:7px; font-size:12.5px;}
+@media (max-width: 900px){ .ficha-grid{grid-template-columns:repeat(2,1fr);} .clube-row{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+/**
+ * CAMADA DE DADOS — Firebase (Firestore) do CT Integrado
+ * ---------------------------------------------------------
+ * Roda no projeto meurh-23fad, sob coleções prefixadas com "ct_"
+ * para não colidir com os dados de RH que já vivem no mesmo projeto.
+ *
+ * Acesso hoje é aberto (sem autenticação), por decisão do responsável.
+ * As Firestore Rules liberando /ct_atletas/** já estão publicadas.
+ */
+
+const firebaseConfig = {
+  apiKey: "AIzaSyARvBxwWERljcaAaJsqLZdMstSVIi-6j2g",
+  authDomain: "meurh-23fad.firebaseapp.com",
+  projectId: "meurh-23fad",
+  storageBucket: "meurh-23fad.firebasestorage.app",
+  messagingSenderId: "241699999089",
+  appId: "1:241699999089:web:cc50293405d6c17db73ad0",
+};
+
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.firestore();
+
+const COL_ATLETAS = "ct_atletas";
+const SUBCOLS = {
+  psi: "ct_psi_avaliacoes",
+  fisio: "ct_fisio_registros",
+  fisiologia: "ct_fisiologia_dados",
+  social: "ct_social_acompanhamento",
+  performance: "ct_performance_jogos",
+};
+
+/** Carrega a lista de atletas (ordenada por nome). */
+async function carregarAtletas() {
+  const snap = await db.collection(COL_ATLETAS).orderBy("nome").get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Carrega TODOS os registros de uma área (psi/fisio/fisiologia/social/performance),
+ * de todos os atletas de uma vez, via collectionGroup — evita N+1 consultas.
+ * Retorna um objeto { [atletaId]: [registros ordenados por data desc] }.
+ */
+async function carregarTodosRegistros(chave) {
+  const snap = await db.collectionGroup(SUBCOLS[chave]).get();
+  const porAtleta = {};
+  snap.docs.forEach((d) => {
+    const atletaId = d.ref.parent.parent.id;
+    const registro = { id: d.id, ...d.data() };
+    if (!porAtleta[atletaId]) porAtleta[atletaId] = [];
+    porAtleta[atletaId].push(registro);
+  });
+  Object.values(porAtleta).forEach((lista) =>
+    lista.sort((a, b) => (b.data || "").localeCompare(a.data || ""))
+  );
+  return porAtleta;
+}
+
+/** Carrega as 5 áreas de uma vez (usado no Painel Admin, que precisa de tudo). */
+async function carregarTudo() {
+  const [atletas, psiData, fisioData, fisiologiaData, socialData, perfData] = await Promise.all([
+    carregarAtletas(),
+    carregarTodosRegistros("psi"),
+    carregarTodosRegistros("fisio"),
+    carregarTodosRegistros("fisiologia"),
+    carregarTodosRegistros("social"),
+    carregarTodosRegistros("performance"),
+  ]);
+  return { atletas, psiData, fisioData, fisiologiaData, socialData, perfData };
+}
+
+
+/** Grava um novo registro na subcoleção de uma área, para um atleta. */
+async function adicionarRegistro(atletaId, chave, dados) {
+  return db
+    .collection(COL_ATLETAS)
+    .doc(atletaId)
+    .collection(SUBCOLS[chave])
+    .add({ ...dados, criado_em: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+/* ---------- Motor do semáforo (mesmo cálculo de antes) ---------- */
+function nivelParaPeso(s) { return s === "vermelho" ? 2 : s === "amarelo" ? 1 : 0; }
+
+function calcularSemaforo(atletaId, dados) {
+  const { psiData, fisioData, socialData, perfData } = dados;
+  const sinais = [];
+  const psi = (psiData[atletaId] || [])[0];
+  const fisio = (fisioData[atletaId] || [])[0];
+  const social = (socialData[atletaId] || [])[0];
+  const perf = (perfData[atletaId] || [])[0];
+
+  let peso = 0;
+  if (psi) { peso += nivelParaPeso(psi.sinal); if (psi.sinal !== "verde" && psi.sinal !== "neutro") sinais.push({ area: "psi", label: "Psicologia" }); }
+  if (fisio) { peso += nivelParaPeso(fisio.sinal); if (fisio.sinal !== "verde" && fisio.sinal !== "neutro") sinais.push({ area: "fisio", label: "Fisioterapia" }); }
+  if (social) { const w = social.statusPublico === "atencao" ? 1 : 0; peso += w; if (w) sinais.push({ area: "social", label: "Serviço social" }); }
+  if (perf) { peso += nivelParaPeso(perf.sinal); if (perf.sinal !== "verde" && perf.sinal !== "neutro") sinais.push({ area: "performance", label: "Desempenho" }); }
+
+  const risco = peso >= 3 ? "vermelho" : peso >= 1 ? "amarelo" : "verde";
+  return { risco, sinais };
+}
+
+function formatarData(iso) {
+  if (!iso || typeof iso !== "string" || !iso.includes("-")) return iso || "—";
+  const [y, m, d] = iso.split("-");
+  return d + "/" + m + "/" + y;
+}
+
+function hojeISO() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return d.getFullYear() + "-" + mm + "-" + dd;
+}
+
+function nomeAtleta(atletas, id) {
+  const a = (atletas || []).find((x) => x.id === id);
+  return a ? a.nome : "—";
+}
+
+
+function BrandMark({ size = 26 }) {
+  return React.createElement(
+    "svg",
+    { width: size, height: size, viewBox: "0 0 40 40", xmlns: "http://www.w3.org/2000/svg" },
+    React.createElement("rect", { width: 40, height: 40, rx: 9, fill: "#B8976A" }),
+    React.createElement("path", { d: "M8 12 L20 20 L8 28 Z", fill: "#0A1F35" }),
+    React.createElement("path", { d: "M32 12 L20 20 L32 28 Z", fill: "#0A1F35" })
+  );
+}
+
+const HUBS = [
+  { id: "admin", label: "Painel Admin", href: "admin.html" },
+  { id: "psicologia", label: "Psicologia", href: "psicologia.html" },
+  { id: "fisioterapia", label: "Fisioterapia", href: "fisioterapia.html" },
+  { id: "fisiologia", label: "Fisiologia", href: "fisiologia.html" },
+  { id: "social", label: "Serviço Social", href: "servico-social.html" },
+  { id: "desempenho", label: "Desempenho", href: "desempenho.html" },
+  { id: "treinador", label: "Treinadores", href: "treinador.html" },
+];
+
+function HubBar({ current }) {
+  return React.createElement(
+    "div",
+    { className: "hubbar" },
+    React.createElement(
+      "div",
+      { className: "hubbar-left" },
+      React.createElement(
+        "div",
+        { className: "hubbar-brand" },
+        React.createElement(BrandMark, null),
+        React.createElement("span", { className: "k" }, "K&G · CT Integrado")
+      ),
+      React.createElement(
+        "div",
+        { className: "hubbar-tabs" },
+        HUBS.map((h) =>
+          React.createElement(
+            "a",
+            {
+              key: h.id,
+              href: h.href,
+              className: "hubbar-tab" + (current === h.id ? " active" : ""),
+            },
+            React.createElement("span", { className: "dot" }),
+            h.label
+          )
+        )
+      )
+    ),
+    React.createElement(
+      "div",
+      { className: "hubbar-right" },
+      React.createElement(
+        "div",
+        { className: "admin-badge" },
+        React.createElement("div", { className: "avatar" }, "JR"),
+        React.createElement("span", { className: "label" }, "Administrador — acesso total")
+      )
+    )
+  );
+}
+
+const SYSTEM_PROMPT_CT = `Você é o assistente de ajuda do CT Integrado, um sistema interno do Meia Noite Esporte Clube (Sub-15/Sub-17), da marca Kaluf & Gomes.
+
+Sua função é ajudar o usuário (hoje, só o Administrador/CEO) a entender COMO USAR o sistema — não responder sobre dados clínicos de nenhum atleta específico, já que você não tem acesso a esses dados.
+
+Estrutura do sistema (5 páginas, cada uma um hub independente, navegáveis pela barra fixa no topo):
+
+1. PAINEL ADMIN (admin.html) — visão geral: semáforo de todos os atletas (verde=regular, amarelo=atenção, vermelho=prioridade), lista de atletas, e o perfil de cada atleta com uma linha do tempo cruzando os registros de todas as áreas.
+
+2. PSICOLOGIA (psicologia.html) — registros de avaliações psicológicas: escalas, testes cognitivos, relatos de sessão. Pra lançar um novo registro, clica em "+ Novo registro" no topo do painel, escolhe o atleta, data, tipo, escreve a observação e marca o sinal (Regular/Atenção/Prioridade).
+
+3. FISIOTERAPIA (fisioterapia.html) — mesma lógica da Psicologia, mas para avaliações físicas, lesões, retorno ao jogo e carga de treino.
+
+4. SERVIÇO SOCIAL (servico-social.html) — acompanhamento social e familiar. Tem um campo a mais: "status público" (Ativo / Em atenção), que é o que aparece resumido pro Admin, e um campo de "detalhe do caso" com o relato completo.
+
+5. PERFORMANCE (performance.html) — estatísticas de jogo e relatórios táticos, mesmo modelo de lançamento dos outros braços.
+
+O SEMÁFORO (visível no Painel Admin) é calculado automaticamente cruzando o sinal mais recente de cada área — quanto mais sinais amarelo/vermelho, maior o risco mostrado.
+
+Fase atual do sistema: ainda é só HTML (sem banco de dados conectado). Isso significa que os registros lançados ficam salvos apenas na memória da página aberta — se o usuário atualizar a página ou for para outro hub, o que foi lançado não persiste ainda. A conexão com Firebase (banco de dados real) é o próximo passo planejado.
+
+Responda sempre em português do Brasil, de forma direta e prática. Se perguntarem algo sobre um atleta específico ou dado clínico, explique que você não tem acesso a esses dados — sua função é só orientar o uso do sistema.`;
+
+function ChatWidget() {
+  const { useState, useRef, useEffect } = React;
+  const [aberto, setAberto] = useState(false);
+  const [mensagens, setMensagens] = useState([
+    { role: "assistant", content: "Oi! Posso ajudar a entender como usar o CT Integrado — onde lançar um registro, o que é o semáforo, como navegar entre os hubs. O que você quer saber?" },
+  ]);
+  const [input, setInput] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const bodyRef = useRef(null);
+
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [mensagens, carregando]);
+
+  async function enviar() {
+    const texto = input.trim();
+    if (!texto || carregando) return;
+
+    const historico = [...mensagens, { role: "user", content: texto }];
+    setMensagens(historico);
+    setInput("");
+    setCarregando(true);
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          system: SYSTEM_PROMPT_CT,
+          messages: historico.map((m) => ({ role: m.role, content: m.content })),
+        }),
+      });
+      const data = await response.json();
+      const blocos = data.content || [];
+      const respostaTexto = blocos
+        .filter((b) => b.type === "text")
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
+
+      setMensagens((prev) => [
+        ...prev,
+        { role: "assistant", content: respostaTexto || "Não consegui gerar uma resposta agora. Tenta reformular a pergunta." },
+      ]);
+    } catch (e) {
+      setMensagens((prev) => [
+        ...prev,
+        { role: "assistant", content: "Não consegui conectar com o assistente agora. Tenta de novo em instantes." },
+      ]);
+    }
+    setCarregando(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      enviar();
+    }
+  }
+
+  return (
+    <React.Fragment>
+      {aberto && (
+        <div className="chat-panel">
+          <div className="chat-head">
+            <div>
+              <div className="title">Assistente do CT Integrado</div>
+              <div className="sub">Dúvidas de uso do sistema</div>
+            </div>
+            <button onClick={() => setAberto(false)} aria-label="Fechar">×</button>
+          </div>
+          <div className="chat-body" ref={bodyRef}>
+            {mensagens.map((m, i) => (
+              <div key={i} className={"chat-msg " + m.role}>{m.content}</div>
+            ))}
+            {carregando && <div className="chat-msg assistant loading">digitando...</div>}
+          </div>
+          <div className="chat-input-row">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Pergunte algo sobre o sistema..."
+              disabled={carregando}
+            />
+            <button onClick={enviar} disabled={carregando || !input.trim()}>Enviar</button>
+          </div>
+        </div>
+      )}
+      <button className="chat-fab" onClick={() => setAberto((v) => !v)} aria-label="Abrir assistente">
+        {aberto ? "×" : "💬"}
+      </button>
+    </React.Fragment>
+  );
+}
+
+const { useState, useEffect } = React;
+
+function Carregando({ texto }) {
+  return (
+    <div className="page">
+      <div className="empty-state">{texto || "Carregando dados do Firestore..."}</div>
+    </div>
+  );
+}
+
+function ErroCarregamento({ mensagem }) {
+  return (
+    <div className="page">
+      <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)"}}>
+        <span><b>Não consegui carregar os dados:</b> {mensagem}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Extrai os campos "Chave: valor" embutidos no texto de uma observação
+ * (nota) — tanto do formato de psicologia ("CSAI-2R — Ans. Cognitiva: 10,
+ * Ans. Somática: 7...") quanto do de performance ("PASSE CERTO: 9, FALTA: 2...").
+ * Ignora o sufixo "(importado de...)" quando presente.
+ */
+function parseNota(nota, tipoConhecido) {
+  if (!nota) return { titulo: "", campos: {} };
+  const semSufixo = nota.replace(/\s*\([^)]*\)\s*$/, "");
+  let titulo = "";
+  let corpo = semSufixo;
+
+  if (tipoConhecido && semSufixo.indexOf(tipoConhecido + " — ") === 0) {
+    // corte exato pelo nome do instrumento já conhecido — funciona mesmo
+    // quando o próprio nome do instrumento contém um travessão (ex: "SIQ — IMAGEM MENTAL").
+    titulo = tipoConhecido;
+    corpo = semSufixo.slice((tipoConhecido + " — ").length);
+  } else {
+    const idxTraco = semSufixo.indexOf(" — ");
+    if (idxTraco !== -1) {
+      titulo = semSufixo.slice(0, idxTraco);
+      corpo = semSufixo.slice(idxTraco + 3);
+    }
+  }
+
+  const campos = {};
+  corpo.split(",").forEach((par) => {
+    const idx = par.indexOf(":");
+    if (idx === -1) return;
+    const chave = par.slice(0, idx).trim();
+    const valorStr = par.slice(idx + 1).trim();
+    const valorNum = Number(valorStr);
+    campos[chave] = isNaN(valorNum) || valorStr === "" ? valorStr : valorNum;
+  });
+  return { titulo, campos };
+}
+
+const PALETA_SUBESCALAS = ["#6E56C8", "#2E7A93", "#B5883A", "#A6473C", "#4C8B63", "#8a7a4a", "#4a6a8a", "#a84a7a"];
+
+function PainelTreinador() {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [atletaAberto, setAtletaAberto] = useState(null);
+
+  useEffect(() => {
+    carregarTudo().then(setDados).catch(e => setErro(e.message));
+  }, []);
+
+  if (erro) {
+    return (
+      <div className="page">
+        <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)"}}>
+          <span><b>Não consegui carregar os dados:</b> {erro}</span>
+        </div>
+      </div>
+    );
+  }
+  if (!dados) {
+    return <div className="page"><div className="empty-state">Carregando dados do Firestore...</div></div>;
+  }
+
+  const linha = dados.atletas.map(a => ({ ...a, ...calcularSemaforo(a.id, dados) }));
+  const contagem = { verde: 0, amarelo: 0, vermelho: 0 };
+  linha.forEach(d => contagem[d.risco]++);
+
+  const atleta = atletaAberto ? linha.find(a => a.id === atletaAberto) : null;
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>{atleta ? atleta.nome : "Painel da Comissão Técnica"}</h1>
+          <div className="crumb">CT Integrado · Meia Noite EC · visão de semáforo, sem dado clínico</div>
+        </div>
+      </div>
+
+      {!atleta && (
+        <React.Fragment>
+          <div className="access-note admin">
+            <span><b>Modo Comissão Técnica:</b> este painel mostra só o sinal consolidado de cada atleta, cruzando todas as áreas. Nenhum dado clínico, social ou de avaliação bruta aparece aqui — para isso, use o Painel Admin.</span>
+          </div>
+          <div className="kpi-row">
+            <div className="kpi-card"><div className="label">Atletas monitorados</div><div className="value">{dados.atletas.length}</div></div>
+            <div className="kpi-card"><div className="label">Sem alerta</div><div className="value verde">{contagem.verde}</div></div>
+            <div className="kpi-card"><div className="label">Atenção</div><div className="value amarelo">{contagem.amarelo}</div></div>
+            <div className="kpi-card"><div className="label">Prioridade</div><div className="value vermelho">{contagem.vermelho}</div></div>
+          </div>
+          <div className="pitch-panel">
+            <div className="pitch-head">
+              <div>
+                <h3>Elenco — Meia Noite EC</h3>
+                <div className="sub">Clique em um jogador para ver o motivo do sinal</div>
+              </div>
+            </div>
+            <div className="pitch-markings"></div>
+            <div className="jersey-grid">
+              {linha.map(d => {
+                const iniciais = d.nome.split(" ").map(p => p[0]).slice(0, 2).join("").toUpperCase();
+                return (
+                  <div key={d.id} className="jersey-btn" onClick={() => setAtletaAberto(d.id)}>
+                    <div className={"jersey-sinal " + d.risco}></div>
+                    <div className="jersey-badge">{iniciais}</div>
+                    <div className="jersey-nome">{d.nome}</div>
+                    <div className="jersey-cat">{d.categoria || "Sem categoria"}</div>
+                  </div>
+                );
+              })}
+              {linha.length === 0 && <div className="empty-state" style={{color:"rgba(255,255,255,0.6)"}}>Nenhum atleta cadastrado ainda.</div>}
+            </div>
+          </div>
+        </React.Fragment>
+      )}
+
+      {atleta && (
+        <div>
+          <button className="back-link" onClick={() => setAtletaAberto(null)}>&larr; Voltar ao elenco</button>
+          <div className="panel">
+            <div className="panel-head"><h3>Sinal atual: {atleta.risco === "verde" ? "Regular" : atleta.risco === "amarelo" ? "Atenção" : "Prioridade"}</h3></div>
+            <div className="panel-body" style={{padding:"16px 20px"}}>
+              {atleta.sinais.length === 0 ? (
+                <div className="empty-state">Sem pendências em nenhuma área no momento.</div>
+              ) : (
+                <div className="flags" style={{gap:8}}>
+                  {atleta.sinais.map((s, i) => <span key={i} className={"flag " + s.area} style={{fontSize:13, padding:"6px 12px"}}>{s.label}</span>)}
+                </div>
+              )}
+              <div className="access-note" style={{marginTop:16}}>
+                <span>Este painel mostra só quais áreas sinalizaram atenção — para o detalhe clínico, fale com o profissional responsável pela área ou acesse o Painel Admin.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div>
+      <HubBar current="treinador" />
+      <ChatWidget />
+      <PainelTreinador />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
