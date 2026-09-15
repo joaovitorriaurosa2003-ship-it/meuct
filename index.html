@@ -11,6 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 :root{
@@ -86,6 +87,63 @@ input,select,textarea{font-family:inherit;}
   display:flex; align-items:center; justify-content:center; font-weight:800; font-size:11px; flex-shrink:0;
 }
 .admin-badge .label{font-size:11.5px; font-weight:700; color:var(--gold-soft); letter-spacing:0.01em; line-height:1.3;}
+.sidebar-sair{
+  width:100%; margin-top:8px; padding:8px; border-radius:7px; border:1px solid rgba(255,255,255,0.14);
+  background:transparent; color:rgba(255,255,255,0.6); font-size:12px; font-weight:600; cursor:pointer;
+}
+.sidebar-sair:hover{color:#fff; border-color:rgba(255,255,255,0.3);}
+
+/* ---------- Login / Cadastro ---------- */
+.auth-screen{
+  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  background: radial-gradient(circle at 30% 20%, var(--navy-3) 0%, var(--navy) 55%, #071626 100%);
+  padding:20px;
+}
+.auth-card{
+  width:100%; max-width:380px; background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.12); border-radius:16px; padding:32px 30px;
+  backdrop-filter:blur(6px);
+}
+.auth-brand{display:flex; align-items:center; gap:12px; margin-bottom:22px;}
+.auth-brand .crest-badge{width:44px; height:44px;}
+.auth-brand .clube{color:#fff; font-weight:800; font-size:17px; display:block;}
+.auth-brand .sistema{color:var(--gold-soft); font-size:11.5px; font-weight:500;}
+.auth-tabs{display:flex; gap:6px; margin-bottom:20px;}
+.auth-tab{
+  flex:1; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.14);
+  background:transparent; color:rgba(255,255,255,0.55); font-size:12.5px; font-weight:700; cursor:pointer;
+}
+.auth-tab.active{background:var(--gold); color:var(--navy); border-color:var(--gold);}
+.auth-field{margin-bottom:12px;}
+.auth-field label{display:block; font-size:11.5px; font-weight:600; color:rgba(255,255,255,0.6); margin-bottom:5px;}
+.auth-field input{
+  width:100%; padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.06); color:#fff; font-size:13.5px;
+}
+.auth-field input:focus{outline:none; border-color:var(--gold);}
+.auth-submit{
+  width:100%; padding:11px; border-radius:8px; border:none; background:var(--gold); color:var(--navy);
+  font-size:13.5px; font-weight:700; cursor:pointer; margin-top:6px;
+}
+.auth-submit:hover{background:var(--gold-soft);}
+.auth-submit:disabled{opacity:.6; cursor:not-allowed;}
+.auth-erro{background:rgba(166,71,60,0.20); border:1px solid rgba(166,71,60,0.45); color:#f5c9c4; font-size:12.5px; padding:9px 12px; border-radius:8px; margin-bottom:14px;}
+.auth-pendente{
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+  background:var(--bg-app);
+}
+.auth-pendente-card{max-width:420px; text-align:center; background:#fff; border-radius:16px; padding:36px 30px; box-shadow:var(--shadow-md);}
+.auth-pendente-card h2{color:var(--navy); font-size:20px; margin-bottom:10px;}
+.auth-pendente-card p{color:var(--muted); font-size:13.5px; line-height:1.6; margin-bottom:18px;}
+
+/* ---------- Painel de usuários ---------- */
+.modulo-toggle-row{display:flex; flex-wrap:wrap; gap:8px; padding:4px 0;}
+.modulo-toggle{
+  padding:6px 12px; border-radius:100px; border:1.5px solid var(--line-soft); background:#fff;
+  color:var(--muted); font-size:12px; font-weight:600; cursor:pointer;
+}
+.modulo-toggle.on{background:var(--verde-bg); border-color:var(--verde); color:var(--verde);}
+.badge.pendente{background:rgba(181,136,58,0.14); color:var(--amarelo);}
 .main-content{flex:1; min-width:0;}
 
 @media (max-width: 860px){
@@ -419,6 +477,58 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
+const auth = firebase.auth();
+
+const COL_USUARIOS = "ct_usuarios";
+
+/** E-mail que sempre vira Admin automaticamente ao criar conta pela primeira vez. */
+const EMAIL_ADMIN_FUNDADOR = "joaovitorriaurosa2003@gmail.com";
+
+/** Lista de módulos do sistema — os ids batem com os ids do HUBS/navegação. */
+const MODULOS = [
+  { id: "admin", label: "Painel Admin" },
+  { id: "psicologia", label: "Psicologia" },
+  { id: "fisioterapia", label: "Fisioterapia" },
+  { id: "fisiologia", label: "Fisiologia" },
+  { id: "social", label: "Serviço Social" },
+  { id: "desempenho", label: "Desempenho" },
+  { id: "treinador", label: "Treinadores" },
+];
+
+/** Cria a conta e o documento de permissão (pendente, exceto o e-mail fundador). */
+async function cadastrar(email, senha, nome) {
+  const cred = await auth.createUserWithEmailAndPassword(email, senha);
+  const ehFundador = email.trim().toLowerCase() === EMAIL_ADMIN_FUNDADOR;
+  await db.collection(COL_USUARIOS).doc(cred.user.uid).set({
+    nome: nome || email,
+    email: email,
+    role: ehFundador ? "admin" : "colaborador",
+    modulos: ehFundador ? MODULOS.map((m) => m.id) : [],
+    criado_em: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  return cred.user;
+}
+
+async function entrar(email, senha) {
+  return auth.signInWithEmailAndPassword(email, senha);
+}
+
+function sair() {
+  return auth.signOut();
+}
+
+async function buscarPermissoes(uid) {
+  const doc = await db.collection(COL_USUARIOS).doc(uid).get();
+  if (!doc.exists) return null;
+  return { id: doc.id, ...doc.data() };
+}
+
+function temPermissao(usuario, moduloId) {
+  if (!usuario) return false;
+  if (usuario.role === "admin") return true;
+  return (usuario.modulos || []).includes(moduloId);
+}
+
 
 const COL_ATLETAS = "ct_atletas";
 const SUBCOLS = {
@@ -540,7 +650,10 @@ const HUBS = [
   { id: "treinador", label: "Treinadores", href: "treinador.html" },
 ];
 
-function HubBar({ current, onNavigate }) {
+function HubBar({ current, onNavigate, usuario, onSair }) {
+  const iniciais = (usuario.nome || usuario.email || "?").trim().split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const hubsVisiveis = HUBS.filter((h) => temPermissao(usuario, h.id));
+
   return React.createElement(
     "div",
     { className: "sidebar" },
@@ -558,7 +671,7 @@ function HubBar({ current, onNavigate }) {
     React.createElement(
       "div",
       { className: "sidebar-nav" },
-      HUBS.map((h) =>
+      hubsVisiveis.map((h) =>
         React.createElement(
           "button",
           {
@@ -570,7 +683,18 @@ function HubBar({ current, onNavigate }) {
           React.createElement("span", { className: "dot" }),
           h.label
         )
-      )
+      ),
+      usuario.role === "admin" &&
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => onNavigate("usuarios"),
+            className: "sidebar-tab" + (current === "usuarios" ? " active" : ""),
+          },
+          React.createElement("span", { className: "dot" }),
+          "Usuários"
+        )
     ),
     React.createElement(
       "div",
@@ -578,9 +702,14 @@ function HubBar({ current, onNavigate }) {
       React.createElement(
         "div",
         { className: "admin-badge" },
-        React.createElement("div", { className: "avatar" }, "JR"),
-        React.createElement("span", { className: "label" }, "Administrador — acesso total")
-      )
+        React.createElement("div", { className: "avatar" }, iniciais),
+        React.createElement(
+          "span",
+          { className: "label" },
+          (usuario.role === "admin" ? "Administrador" : "Colaborador") + " · " + (usuario.nome || usuario.email)
+        )
+      ),
+      React.createElement("button", { type: "button", className: "sidebar-sair", onClick: onSair }, "Sair")
     )
   );
 }
@@ -2989,23 +3118,249 @@ function ViewAdmin() {
   );
 }
 
-function App() {
-  const [pagina, setPagina] = useState("admin");
+function AuthScreen() {
+  const [modo, setModo] = useState("entrar"); // "entrar" | "cadastrar"
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+
+  function traduzirErro(codigo) {
+    const mapa = {
+      "auth/email-already-in-use": "Esse e-mail já tem uma conta. Tenta entrar em vez de cadastrar.",
+      "auth/invalid-email": "E-mail inválido.",
+      "auth/weak-password": "A senha precisa ter pelo menos 6 caracteres.",
+      "auth/user-not-found": "Não achei conta com esse e-mail.",
+      "auth/wrong-password": "Senha incorreta.",
+      "auth/invalid-credential": "E-mail ou senha incorretos.",
+      "auth/too-many-requests": "Muitas tentativas. Espera um pouco e tenta de novo.",
+    };
+    return mapa[codigo] || "Não consegui completar. Tenta de novo.";
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErro(null);
+    setCarregando(true);
+    try {
+      if (modo === "cadastrar") {
+        await cadastrar(email.trim(), senha, nome.trim());
+      } else {
+        await entrar(email.trim(), senha);
+      }
+    } catch (err) {
+      setErro(traduzirErro(err.code));
+    }
+    setCarregando(false);
+  }
+
   return (
-    <div className="app-shell">
-      <HubBar current={pagina} onNavigate={setPagina} />
-      <div className="main-content">
-        <ChatWidget />
-        {pagina === "admin" && <ViewAdmin />}
-        {pagina === "psicologia" && <ViewPsicologia />}
-        {pagina === "fisioterapia" && <ViewFisioterapia />}
-        {pagina === "fisiologia" && <ViewFisiologia />}
-        {pagina === "social" && <ViewSocial />}
-        {pagina === "desempenho" && <ViewDesempenho />}
-        {pagina === "treinador" && <PainelTreinador />}
+    <div className="auth-screen">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <img src={ESCUDO_MEIA_NOITE} className="crest-badge" alt="Escudo do Meia Noite EC" />
+          <div>
+            <span className="clube">Meia Noite EC</span>
+            <span className="sistema">CT Integrado</span>
+          </div>
+        </div>
+        <div className="auth-tabs">
+          <button type="button" className={"auth-tab" + (modo === "entrar" ? " active" : "")} onClick={() => setModo("entrar")}>Entrar</button>
+          <button type="button" className={"auth-tab" + (modo === "cadastrar" ? " active" : "")} onClick={() => setModo("cadastrar")}>Criar conta</button>
+        </div>
+        {erro && <div className="auth-erro">{erro}</div>}
+        <form onSubmit={handleSubmit}>
+          {modo === "cadastrar" && (
+            <div className="auth-field">
+              <label>Nome</label>
+              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} required />
+            </div>
+          )}
+          <div className="auth-field">
+            <label>E-mail</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div className="auth-field">
+            <label>Senha</label>
+            <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required minLength={6} />
+          </div>
+          <button className="auth-submit" type="submit" disabled={carregando}>
+            {carregando ? "Aguenta aí..." : modo === "cadastrar" ? "Criar conta" : "Entrar"}
+          </button>
+        </form>
       </div>
     </div>
   );
+}
+
+function TelaPendente({ usuario }) {
+  return (
+    <div className="auth-pendente">
+      <div className="auth-pendente-card">
+        <img src={ESCUDO_MEIA_NOITE} style={{width:52, height:52, borderRadius:"50%", marginBottom:16}} alt="" />
+        <h2>Conta criada — aguardando liberação</h2>
+        <p>Sua conta ({usuario.email}) foi criada, mas ainda não tem nenhum módulo liberado. Fala com o administrador do CT Integrado pra ele liberar seu acesso.</p>
+        <button className="pill-btn" onClick={sair}>Sair</button>
+      </div>
+    </div>
+  );
+}
+
+function SemPermissao() {
+  return <div className="page"><div className="empty-state">Você não tem permissão pra acessar este módulo. Fala com o administrador se achar que deveria ter.</div></div>;
+}
+
+function PainelUsuarios({ usuarioAtual }) {
+  const [usuarios, setUsuarios] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [salvandoId, setSalvandoId] = useState(null);
+
+  async function carregar() {
+    const snap = await db.collection(COL_USUARIOS).orderBy("email").get();
+    setUsuarios(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+
+  useEffect(() => { carregar().catch((e) => setErro(e.message)); }, []);
+
+  async function alternarModulo(usr, moduloId) {
+    const atual = usr.modulos || [];
+    const novo = atual.includes(moduloId) ? atual.filter((m) => m !== moduloId) : [...atual, moduloId];
+    setSalvandoId(usr.id);
+    await db.collection(COL_USUARIOS).doc(usr.id).update({ modulos: novo });
+    await carregar();
+    setSalvandoId(null);
+  }
+
+  async function alternarRole(usr) {
+    const novoRole = usr.role === "admin" ? "colaborador" : "admin";
+    setSalvandoId(usr.id);
+    await db.collection(COL_USUARIOS).doc(usr.id).update({ role: novoRole });
+    await carregar();
+    setSalvandoId(null);
+  }
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Usuários</h1>
+          <div className="crumb">CT Integrado · Meia Noite EC · controle de acesso por módulo</div>
+        </div>
+      </div>
+
+      {erro ? (
+        <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)"}}><span>{erro}</span></div>
+      ) : !usuarios ? (
+        <SkeletonPanel />
+      ) : (
+        <div className="panel">
+          <div className="panel-head"><h3>Todas as contas ({usuarios.length})</h3></div>
+          <div className="panel-body">
+            <table>
+              <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Módulos liberados</th></tr></thead>
+              <tbody>
+                {usuarios.map((u) => (
+                  <tr key={u.id}>
+                    <td style={{fontWeight:600, color:"var(--navy)"}}>{u.nome || "—"}</td>
+                    <td className="muted">{u.email}</td>
+                    <td>
+                      <button
+                        className={"badge " + (u.role === "admin" ? "verde" : "pendente")}
+                        style={{cursor: u.id === usuarioAtual.id ? "not-allowed" : "pointer", border:"none"}}
+                        onClick={() => u.id !== usuarioAtual.id && alternarRole(u)}
+                        disabled={salvandoId === u.id || u.id === usuarioAtual.id}
+                        title={u.id === usuarioAtual.id ? "Não dá pra tirar seu próprio acesso de admin por aqui" : "Clique pra alternar"}
+                      >
+                        {u.role === "admin" ? "Admin" : "Colaborador"}
+                      </button>
+                    </td>
+                    <td>
+                      {u.role === "admin" ? (
+                        <span className="muted">Acesso total (é admin)</span>
+                      ) : (
+                        <div className="modulo-toggle-row">
+                          {MODULOS.filter((m) => m.id !== "admin").map((m) => (
+                            <button
+                              key={m.id}
+                              className={"modulo-toggle" + ((u.modulos || []).includes(m.id) ? " on" : "")}
+                              onClick={() => alternarModulo(u, m.id)}
+                              disabled={salvandoId === u.id}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AppLogado({ usuario }) {
+  const [pagina, setPagina] = useState(temPermissao(usuario, "admin") ? "admin" : (usuario.modulos || [])[0] || "admin");
+
+  const paginasComponente = {
+    admin: <ViewAdmin />,
+    psicologia: <ViewPsicologia />,
+    fisioterapia: <ViewFisioterapia />,
+    fisiologia: <ViewFisiologia />,
+    social: <ViewSocial />,
+    desempenho: <ViewDesempenho />,
+    treinador: <PainelTreinador />,
+    usuarios: <PainelUsuarios usuarioAtual={usuario} />,
+  };
+
+  const podeVerPagina = pagina === "usuarios" ? usuario.role === "admin" : temPermissao(usuario, pagina);
+
+  return (
+    <div className="app-shell">
+      <HubBar current={pagina} onNavigate={setPagina} usuario={usuario} onSair={sair} />
+      <div className="main-content">
+        <ChatWidget />
+        {podeVerPagina ? paginasComponente[pagina] : <SemPermissao />}
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [authUser, setAuthUser] = useState(undefined); // undefined = ainda checando, null = deslogado
+  const [usuario, setUsuario] = useState(null);
+  const [carregandoPerm, setCarregandoPerm] = useState(false);
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(async (u) => {
+      setAuthUser(u);
+      if (u) {
+        setCarregandoPerm(true);
+        const perm = await buscarPermissoes(u.uid);
+        setUsuario(perm);
+        setCarregandoPerm(false);
+      } else {
+        setUsuario(null);
+      }
+    });
+    return unsub;
+  }, []);
+
+  if (authUser === undefined || carregandoPerm) {
+    return <div className="auth-pendente"><div className="empty-state">Carregando...</div></div>;
+  }
+  if (!authUser) {
+    return <AuthScreen />;
+  }
+  if (!usuario || (usuario.role !== "admin" && (usuario.modulos || []).length === 0)) {
+    return <TelaPendente usuario={usuario || { email: authUser.email }} />;
+  }
+  return <AppLogado usuario={usuario} />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
