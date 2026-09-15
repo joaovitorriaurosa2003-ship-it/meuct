@@ -3134,9 +3134,12 @@ function AuthScreen() {
       "auth/user-not-found": "Não achei conta com esse e-mail.",
       "auth/wrong-password": "Senha incorreta.",
       "auth/invalid-credential": "E-mail ou senha incorretos.",
+      "auth/invalid-login-credentials": "E-mail ou senha incorretos.",
       "auth/too-many-requests": "Muitas tentativas. Espera um pouco e tenta de novo.",
+      "auth/network-request-failed": "Falha de rede — confere sua conexão e tenta de novo.",
+      "auth/user-disabled": "Essa conta foi desativada.",
     };
-    return mapa[codigo] || "Não consegui completar. Tenta de novo.";
+    return mapa[codigo] || `Não consegui completar (código: ${codigo || "desconhecido"}). Se persistir, manda esse código pra quem administra o sistema.`;
   }
 
   async function handleSubmit(e) {
