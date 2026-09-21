@@ -2,7 +2,7 @@
   "name": "CT Integrado - Meia Noite EC",
   "short_name": "CT Integrado",
   "description": "Plataforma de gestao multidisciplinar de atletas do Meia Noite Esporte Clube",
-  "start_url": "./ct-integrado.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0A1F35",

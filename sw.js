@@ -5,7 +5,7 @@
 
 const CACHE_NAME = "ct-integrado-cache-v1";
 const APP_SHELL = [
-  "./ct-integrado.html",
+  "./index.html",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png"
