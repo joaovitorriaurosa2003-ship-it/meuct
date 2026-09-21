@@ -461,6 +461,34 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 .clube-row{display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:8px; margin-bottom:8px; align-items:center;}
 .clube-row input{padding:8px 10px; border:1px solid var(--line-soft); border-radius:7px; font-size:12.5px;}
 @media (max-width: 900px){ .ficha-grid{grid-template-columns:repeat(2,1fr);} .clube-row{grid-template-columns:1fr;} }
+
+/* ---------- Ajustes finos para celular ---------- */
+/* Tabelas: em vez de espremer as colunas, rolam na horizontal dentro do próprio card */
+.panel-body{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+.panel-body table{min-width:560px;}
+
+@media (max-width: 600px){
+  .page-head{flex-direction:column; align-items:flex-start; gap:6px;}
+  .page-head h1{font-size:21px;}
+  .profile-head{flex-wrap:wrap;}
+  .form-actions{flex-direction:column-reverse; align-items:stretch;}
+  .form-actions .pill-btn{width:100%; text-align:center; padding:11px 14px;}
+  .panel-head{flex-wrap:wrap; gap:8px;}
+}
+
+@media (max-width: 480px){
+  .page{padding:16px 12px 44px;}
+  .kpi-row, .skeleton-kpi-row{grid-template-columns:1fr;}
+  .ficha-grid{grid-template-columns:1fr;}
+  thead th, tbody td{padding:10px 14px; font-size:13px;}
+  .panel-body table{min-width:480px;}
+  .chart-box-wide{height:260px;}
+  .chart-box canvas{max-height:180px;}
+  .pill-btn{padding:9px 14px;}
+  .auth-card{padding:26px 20px;}
+  .profile-avatar{width:46px; height:46px; font-size:16px;}
+  .profile-name{font-size:20px;}
+}
 </style>
 </head>
 <body>
