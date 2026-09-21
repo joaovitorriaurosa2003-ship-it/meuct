@@ -533,6 +533,47 @@ function temPermissao(usuario, moduloId) {
   return (usuario.modulos || []).includes(moduloId);
 }
 
+/** Quem pode criar/editar/mesclar/excluir atleta: Admin, Treinador, Psicologia e Serviço Social. */
+function podeGerenciarAtletas(usuario) {
+  return temPermissao(usuario, "admin") || temPermissao(usuario, "treinador") || temPermissao(usuario, "psicologia") || temPermissao(usuario, "social");
+}
+
+/** Exclui o atleta e TODOS os registros dele em todas as áreas. Irreversível. */
+async function excluirAtleta(atletaId) {
+  for (const subcol of Object.values(SUBCOLS)) {
+    const snap = await db.collection(COL_ATLETAS).doc(atletaId).collection(subcol).get();
+    for (const doc of snap.docs) {
+      await doc.ref.delete();
+    }
+  }
+  await db.collection(COL_ATLETAS).doc(atletaId).delete();
+}
+
+/**
+ * Carrega os dados respeitando a permissão de quem está vendo: só busca
+ * (e só tenta ler) as áreas que o usuário tem acesso. Áreas sem permissão
+ * voltam vazias — assim nenhum painel daquela área aparece pra quem não
+ * pode ver, e nenhuma leitura é tentada contra as regras do Firestore
+ * (que negariam mesmo, mas isso evita a rejeição quebrar o carregamento
+ * das áreas que ELE pode ver).
+ */
+async function carregarPermitido(usuario) {
+  const mapaAreaModulo = { psi: "psicologia", fisio: "fisioterapia", fisiologia: "fisiologia", social: "social", performance: "desempenho" };
+  const atletas = await carregarAtletas();
+  const resultado = { atletas, psiData: {}, fisioData: {}, fisiologiaData: {}, socialData: {}, perfData: {} };
+  const chaveParaCampo = { psi: "psiData", fisio: "fisioData", fisiologia: "fisiologiaData", social: "socialData", performance: "perfData" };
+
+  await Promise.all(
+    Object.entries(mapaAreaModulo)
+      .filter(([, modulo]) => temPermissao(usuario, modulo))
+      .map(async ([chave]) => {
+        resultado[chaveParaCampo[chave]] = await carregarTodosRegistros(chave);
+      })
+  );
+
+  return resultado;
+}
+
 
 const COL_ATLETAS = "ct_atletas";
 const SUBCOLS = {
@@ -675,6 +716,16 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
     React.createElement(
       "div",
       { className: "sidebar-nav" },
+      React.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => onNavigate("elenco"),
+          className: "sidebar-tab" + (current === "elenco" ? " active" : ""),
+        },
+        React.createElement("span", { className: "dot" }),
+        "Elenco"
+      ),
       hubsVisiveis.map((h) =>
         React.createElement(
           "button",
@@ -1461,6 +1512,57 @@ function ElencoPorPosicao({ atletasComSinal, onOpenAtleta }) {
   );
 }
 
+/**
+ * Elenco compartilhado — acessível de qualquer módulo, pra qualquer
+ * usuário logado navegar o time e abrir o perfil de um atleta. Os dados
+ * de cada área só carregam se a pessoa tiver permissão naquela área
+ * (carregarPermitido cuida disso); o resto do perfil simplesmente não
+ * aparece pra quem não pode ver.
+ */
+function ViewElenco({ usuario }) {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [atletaAberto, setAtletaAberto] = useState(null);
+
+  function recarregar() {
+    return carregarPermitido(usuario).then(setDados).catch(e => setErro(e.message));
+  }
+
+  useEffect(() => { recarregar(); }, []);
+
+  if (erro) {
+    return <div className="page"><ErroCarregamento mensagem={erro} /></div>;
+  }
+  if (!dados) {
+    return <div className="page"><Carregando /></div>;
+  }
+
+  const linha = dados.atletas.map(a => ({ ...a, ...calcularSemaforo(a.id, dados) }));
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>{atletaAberto ? "Perfil do atleta" : "Elenco"}</h1>
+          <div className="crumb">CT Integrado · Meia Noite EC · você vê o que sua área tem permissão de ver</div>
+        </div>
+      </div>
+
+      {atletaAberto ? (
+        <PerfilAtleta atletaId={atletaAberto} onBack={() => setAtletaAberto(null)} dados={dados} onRecarregar={recarregar} usuario={usuario} />
+      ) : (
+        <React.Fragment>
+          {podeGerenciarAtletas(usuario) ? (
+            <ListaAtletas dados={dados} onOpenAtleta={setAtletaAberto} onRecarregar={recarregar} usuario={usuario} />
+          ) : (
+            <ElencoPorPosicao atletasComSinal={linha} onOpenAtleta={setAtletaAberto} />
+          )}
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ dados, onOpenAtleta }) {
   const linha = dados.atletas.map(a => ({ ...a, ...calcularSemaforo(a.id, dados) }));
   const contagem = { verde: 0, amarelo: 0, vermelho: 0 };
@@ -1744,10 +1846,40 @@ function MesclarAtletas({ atletas, onMesclado }) {
   );
 }
 
-function ListaAtletas({ dados, onOpenAtleta, onRecarregar }) {
+function ConfirmarExclusao({ atleta, dados, onCancelar, onExcluido }) {
   const { useState } = React;
-  const [modo, setModo] = useState(null); // null | "novo" | { editando: atletaId } | "mesclar"
+  const [excluindo, setExcluindo] = useState(false);
+  const totalRegistros = ["psiData", "fisioData", "fisiologiaData", "socialData", "perfData"]
+    .reduce((soma, chave) => soma + ((dados[chave] || {})[atleta.id] || []).length, 0);
+
+  async function confirmar() {
+    setExcluindo(true);
+    await excluirAtleta(atleta.id);
+    onExcluido();
+  }
+
+  return (
+    <div className="form-panel">
+      <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)"}}>
+        <span>
+          <b>Excluir {atleta.nome}?</b> Isso apaga o cadastro e {totalRegistros > 0 ? <b>todos os {totalRegistros} registro(s)</b> : "nenhum registro (não tem dado lançado ainda)"} dele em todas as áreas. Não tem como desfazer.
+        </span>
+      </div>
+      <div className="form-actions">
+        <button className="pill-btn" onClick={onCancelar} disabled={excluindo}>Cancelar</button>
+        <button className="pill-btn primary" style={{background:"var(--vermelho)", borderColor:"var(--vermelho)"}} onClick={confirmar} disabled={excluindo}>
+          {excluindo ? "Excluindo..." : "Sim, excluir definitivamente"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
+  const { useState } = React;
+  const [modo, setModo] = useState(null); // null | "novo" | { editando } | { excluindo } | "mesclar"
   const linha = dados.atletas.map(a => ({ ...a, ...calcularSemaforo(a.id, dados) }));
+  const podeGerenciar = podeGerenciarAtletas(usuario);
 
   async function salvarNovo(campos) {
     await db.collection(COL_ATLETAS).add({ ...campos, origem: "cadastro_manual", pendente_vinculo: false });
@@ -1762,31 +1894,43 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar }) {
   }
 
   const atletaEmEdicao = modo && modo.editando ? dados.atletas.find(a => a.id === modo.editando) : null;
+  const atletaExcluindo = modo && modo.excluindo ? dados.atletas.find(a => a.id === modo.excluindo) : null;
 
   return (
     <div>
       <div className="panel">
         <div className="panel-head">
           <h3>Todos os atletas ({linha.length})</h3>
-          <div style={{display:"flex", gap:8}}>
-            <button className={"pill-btn" + (modo === "mesclar" ? " primary" : "")} onClick={() => setModo(modo === "mesclar" ? null : "mesclar")}>Mesclar duplicata</button>
-            <button className={"pill-btn primary"} onClick={() => setModo(modo === "novo" ? null : "novo")}>{modo === "novo" ? "Fechar" : "+ Novo atleta"}</button>
-          </div>
+          {podeGerenciar && (
+            <div style={{display:"flex", gap:8}}>
+              <button className={"pill-btn" + (modo === "mesclar" ? " primary" : "")} onClick={() => setModo(modo === "mesclar" ? null : "mesclar")}>Mesclar duplicata</button>
+              <button className={"pill-btn primary"} onClick={() => setModo(modo === "novo" ? null : "novo")}>{modo === "novo" ? "Fechar" : "+ Novo atleta"}</button>
+            </div>
+          )}
         </div>
 
-        {modo === "novo" && (
+        {!podeGerenciar && (
+          <div className="access-note" style={{margin:"14px 20px 0"}}>
+            <span>Seu perfil pode navegar o elenco, mas só Admin, Treinador, Psicologia e Serviço Social podem criar, editar, mesclar ou excluir atletas.</span>
+          </div>
+        )}
+
+        {modo === "novo" && podeGerenciar && (
           <FormAtleta atleta={null} onSalvar={salvarNovo} onCancelar={() => setModo(null)} />
         )}
-        {modo === "mesclar" && (
+        {modo === "mesclar" && podeGerenciar && (
           <MesclarAtletas atletas={dados.atletas} onMesclado={() => { setModo(null); onRecarregar(); }} />
         )}
-        {atletaEmEdicao && (
+        {atletaEmEdicao && podeGerenciar && (
           <FormAtleta atleta={atletaEmEdicao} onSalvar={(campos) => salvarEdicao(atletaEmEdicao.id, campos)} onCancelar={() => setModo(null)} />
+        )}
+        {atletaExcluindo && podeGerenciar && (
+          <ConfirmarExclusao atleta={atletaExcluindo} dados={dados} onCancelar={() => setModo(null)} onExcluido={() => { setModo(null); onRecarregar(); }} />
         )}
 
         <div className="panel-body">
           <table>
-            <thead><tr><th>Nome</th><th>Categoria</th><th>Origem</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>Categoria</th><th>Origem</th><th>Status</th>{podeGerenciar && <th></th>}</tr></thead>
             <tbody>
               {linha.map(d => (
                 <tr key={d.id} className="clickable">
@@ -1794,7 +1938,12 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar }) {
                   <td onClick={() => onOpenAtleta(d.id)}>{d.categoria || "—"}</td>
                   <td className="muted" onClick={() => onOpenAtleta(d.id)}>{d.origem || "—"}</td>
                   <td onClick={() => onOpenAtleta(d.id)}><span className={"badge " + d.risco}>{d.risco === "verde" ? "Regular" : d.risco === "amarelo" ? "Atenção" : "Prioridade"}</span></td>
-                  <td><button className="pill-btn" onClick={(e) => { e.stopPropagation(); setModo({ editando: d.id }); }}>Editar</button></td>
+                  {podeGerenciar && (
+                    <td style={{display:"flex", gap:6}}>
+                      <button className="pill-btn" onClick={(e) => { e.stopPropagation(); setModo({ editando: d.id }); }}>Editar</button>
+                      <button className="pill-btn" style={{color:"var(--vermelho)"}} onClick={(e) => { e.stopPropagation(); setModo({ excluindo: d.id }); }}>Excluir</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -2095,7 +2244,7 @@ function FichaAtleta({ atleta, onEditar }) {
     <div className="panel">
       <div className="panel-head">
         <h3>Ficha do atleta</h3>
-        <button className="pill-btn" onClick={onEditar}>Editar ficha</button>
+        {onEditar && <button className="pill-btn" onClick={onEditar}>Editar ficha</button>}
       </div>
       <div className="ficha-grid">
         <div className="ficha-item"><div className="ficha-label">Posição</div><div className="ficha-valor">{atleta.posicao || "—"}</div></div>
@@ -2160,13 +2309,14 @@ function PainelAreaSimples({ titulo, registros, colunaExtra }) {
   );
 }
 
-function PerfilAtleta({ atletaId, onBack, dados, onRecarregar }) {
+function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
   const { useState } = React;
   const atleta = dados.atletas.find(a => a.id === atletaId);
   if (!atleta) return <div className="empty-state">Atleta não encontrado.</div>;
   const { risco } = calcularSemaforo(atletaId, dados);
   const iniciais = atleta.nome.split(" ").map(p => p[0]).slice(0, 2).join("");
   const [editando, setEditando] = useState(false);
+  const podeEditar = podeGerenciarAtletas(usuario);
 
   const temPsi = (dados.psiData[atletaId] || []).length > 0;
   const temPerf = (dados.perfData[atletaId] || []).length > 0;
@@ -2193,13 +2343,13 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar }) {
         </div>
       )}
 
-      {editando ? (
+      {editando && podeEditar ? (
         <div className="panel">
           <div className="panel-head"><h3>Editar ficha</h3></div>
           <FormAtleta atleta={atleta} onSalvar={salvarFicha} onCancelar={() => setEditando(false)} />
         </div>
       ) : (
-        <FichaAtleta atleta={atleta} onEditar={() => setEditando(true)} />
+        <FichaAtleta atleta={atleta} onEditar={podeEditar ? () => setEditando(true) : null} />
       )}
 
       <div className="panel">
@@ -3082,7 +3232,7 @@ function ViewDesempenho() {
   );
 }
 
-function ViewAdmin() {
+function ViewAdmin({ usuario }) {
   const [view, setView] = useState("dashboard");
   const [atletaAberto, setAtletaAberto] = useState(null);
   const [dados, setDados] = useState(null);
@@ -3117,11 +3267,11 @@ function ViewAdmin() {
       ) : !dados ? (
         <Carregando />
       ) : atletaAberto ? (
-        <PerfilAtleta atletaId={atletaAberto} onBack={fecharAtleta} dados={dados} onRecarregar={recarregar} />
+        <PerfilAtleta atletaId={atletaAberto} onBack={fecharAtleta} dados={dados} onRecarregar={recarregar} usuario={usuario} />
       ) : view === "dashboard" ? (
         <Dashboard dados={dados} onOpenAtleta={openAtleta} />
       ) : (
-        <ListaAtletas dados={dados} onOpenAtleta={openAtleta} onRecarregar={recarregar} />
+        <ListaAtletas dados={dados} onOpenAtleta={openAtleta} onRecarregar={recarregar} usuario={usuario} />
       )}
     </div>
   );
@@ -3330,7 +3480,8 @@ function AppLogado({ usuario }) {
   const [pagina, setPagina] = useState(temPermissao(usuario, "admin") ? "admin" : (usuario.modulos || [])[0] || "admin");
 
   const paginasComponente = {
-    admin: <ViewAdmin />,
+    elenco: <ViewElenco usuario={usuario} />,
+    admin: <ViewAdmin usuario={usuario} />,
     psicologia: <ViewPsicologia />,
     fisioterapia: <ViewFisioterapia />,
     fisiologia: <ViewFisiologia />,
@@ -3340,7 +3491,7 @@ function AppLogado({ usuario }) {
     usuarios: <PainelUsuarios usuarioAtual={usuario} />,
   };
 
-  const podeVerPagina = pagina === "usuarios" ? usuario.role === "admin" : temPermissao(usuario, pagina);
+  const podeVerPagina = pagina === "elenco" ? true : pagina === "usuarios" ? usuario.role === "admin" : temPermissao(usuario, pagina);
 
   return (
     <div className="app-shell">
