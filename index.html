@@ -2857,7 +2857,10 @@ function PainelAreaSimples({ titulo, registros, colunaExtra }) {
               <tr key={i}>
                 <td>{formatarData(r.data)}</td>
                 <td>{r.tipo}</td>
-                <td className="muted">{colunaExtra ? r.detalhe : r.nota}</td>
+                <td className="muted">
+                  {colunaExtra ? r.detalhe : r.nota}
+                  {r.avaliador && <div style={{marginTop:2, fontSize:11, opacity:0.75}}>Avaliado por: {r.avaliador}</div>}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -3169,7 +3172,7 @@ function FormNovoRegistroSocial({ atletas, onSalvar, onCancelar }) {
 }
 
 /** Formulário estruturado de lesão (fisioterapia): região, tipo, mecanismo, gravidade e fase de RTP. */
-function FormLesao({ atletas, onSalvar, onCancelar }) {
+function FormLesao({ atletas, usuario, onSalvar, onCancelar }) {
   const [atletaId, setAtletaId] = useState(atletas[0] ? atletas[0].id : "");
   const [dataInicio, setDataInicio] = useState(hojeISO());
   const [regiao, setRegiao] = useState(REGIOES_CORPO[0]);
@@ -3178,6 +3181,7 @@ function FormLesao({ atletas, onSalvar, onCancelar }) {
   const [gravidade, setGravidade] = useState("leve");
   const [previsaoRetorno, setPrevisaoRetorno] = useState("");
   const [faseRtp, setFaseRtp] = useState("repouso");
+  const [avaliador, setAvaliador] = useState(usuario ? (usuario.nome || usuario.email || "") : "");
   const [nota, setNota] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -3193,6 +3197,7 @@ function FormLesao({ atletas, onSalvar, onCancelar }) {
         regiao, tipo_lesao: tipoLesao, mecanismo, gravidade,
         previsao_retorno: previsaoRetorno || null,
         fase_rtp: faseRtp,
+        avaliador: avaliador.trim(),
         nota: notaFinal,
         sinal: sinalPorGravidadeFase(gravidade, faseRtp),
       });
@@ -3258,6 +3263,12 @@ function FormLesao({ atletas, onSalvar, onCancelar }) {
           <input type="date" value={previsaoRetorno} onChange={e => setPrevisaoRetorno(e.target.value)} />
         </div>
       </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Avaliado por</label>
+          <input type="text" placeholder="Nome de quem está avaliando" value={avaliador} onChange={e => setAvaliador(e.target.value)} />
+        </div>
+      </div>
       <div className="form-grid full">
         <div className="field">
           <label>Observação (opcional — se vazio, gera um resumo automático)</label>
@@ -3274,7 +3285,7 @@ function FormLesao({ atletas, onSalvar, onCancelar }) {
 }
 
 /** Botão compacto pra avançar a fase de RTP de uma lesão ativa, sem reabrir o formulário inteiro. */
-function AvancarFaseRtp({ atletaId, episodio, onSalvar }) {
+function AvancarFaseRtp({ atletaId, episodio, usuario, onSalvar }) {
   const [aberto, setAberto] = useState(false);
   const [fase, setFase] = useState(episodio.faseAtual);
   const [salvando, setSalvando] = useState(false);
@@ -3289,6 +3300,7 @@ function AvancarFaseRtp({ atletaId, episodio, onSalvar }) {
         regiao: episodio.regiao,
         gravidade: episodio.gravidade,
         fase_rtp: fase,
+        avaliador: usuario ? (usuario.nome || usuario.email || "") : "",
         nota: `Atualização de fase — ${episodio.regiao}: ${labelFaseRtp(fase)}.`,
         sinal: sinalPorGravidadeFase(episodio.gravidade, fase),
       });
@@ -4238,7 +4250,7 @@ function ViewPsicologia() {
   );
 }
 
-function ViewFisioterapia() {
+function ViewFisioterapia({ usuario }) {
   const [atletas, setAtletas] = useState(null);
   const [registros, setRegistros] = useState({});
   const [erro, setErro] = useState(null);
@@ -4327,7 +4339,7 @@ function ViewFisioterapia() {
                 <div className="panel-head"><h3>Acompanhamento de lesões (ativas ou com reincidência)</h3></div>
                 <div className="panel-body">
                   <table>
-                    <thead><tr><th>Atleta</th><th>Região</th><th>Fase RTP</th><th>Dias afastado</th><th>Situação</th><th></th></tr></thead>
+                    <thead><tr><th>Atleta</th><th>Região</th><th>Fase RTP</th><th>Dias afastado</th><th>Avaliado por</th><th>Situação</th><th></th></tr></thead>
                     <tbody>
                       {episodiosPorAtleta.flatMap(({ atleta, episodios }) =>
                         episodios.map((ep, i) => (
@@ -4336,8 +4348,9 @@ function ViewFisioterapia() {
                             <td>{ep.regiao}</td>
                             <td><span className={"badge " + (ep.faseAtual === "liberado" ? "verde" : ep.faseAtual === "repouso" ? "vermelho" : "amarelo")}>{labelFaseRtp(ep.faseAtual)}</span></td>
                             <td>{calcularDiasEntre(ep.dataInicio)}</td>
+                            <td className="muted">{(ep.registros[0] && ep.registros[0].avaliador) || "—"}</td>
                             <td>{ep.reincidente && <span className="badge amarelo">⚠ Reincidência</span>}</td>
-                            <td>{ep.ativo && <AvancarFaseRtp atletaId={atleta.id} episodio={ep} onSalvar={adicionar} />}</td>
+                            <td>{ep.ativo && <AvancarFaseRtp atletaId={atleta.id} episodio={ep} usuario={usuario} onSalvar={adicionar} />}</td>
                           </tr>
                         ))
                       )}
@@ -4358,7 +4371,7 @@ function ViewFisioterapia() {
                 </div>
               )}
               {formAberto && tipoForm === "Lesão" && (
-                <FormLesao atletas={atletas} onSalvar={adicionar} onCancelar={() => setFormAberto(false)} />
+                <FormLesao atletas={atletas} usuario={usuario} onSalvar={adicionar} onCancelar={() => setFormAberto(false)} />
               )}
               {formAberto && tipoForm === "Outro registro" && (
                 <FormNovoRegistro
@@ -4371,7 +4384,7 @@ function ViewFisioterapia() {
               )}
               <div className="panel-body">
                 <table>
-                  <thead><tr><th>Atleta</th><th>Data</th><th>Tipo</th><th>Observação</th><th>Sinal</th></tr></thead>
+                  <thead><tr><th>Atleta</th><th>Data</th><th>Tipo</th><th>Observação</th><th>Avaliado por</th><th>Sinal</th></tr></thead>
                   <tbody>
                     {Object.entries(registros).flatMap(([athleteId, regs]) =>
                       regs.map((r, i) => (
@@ -4380,11 +4393,12 @@ function ViewFisioterapia() {
                           <td>{formatarData(r.data)}</td>
                           <td>{r.tipo}{r.regiao ? " — " + r.regiao : ""}</td>
                           <td className="muted">{r.nota}</td>
+                          <td className="muted">{r.avaliador || "—"}</td>
                           <td><span className={"badge " + (r.sinal === "neutro" ? "neutro" : r.sinal)}>{r.sinal === "verde" ? "Regular" : r.sinal === "amarelo" ? "Atenção" : r.sinal === "vermelho" ? "Prioridade" : "Informativo"}</span></td>
                         </tr>
                       ))
                     )}
-                    {Object.keys(registros).length === 0 && <tr><td colSpan="5" className="empty-state">Nenhum registro lançado ainda.</td></tr>}
+                    {Object.keys(registros).length === 0 && <tr><td colSpan="6" className="empty-state">Nenhum registro lançado ainda.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -5168,7 +5182,7 @@ function AppLogado({ usuario }) {
     elenco: <ViewElenco usuario={usuario} />,
     admin: <ViewAdmin usuario={usuario} />,
     psicologia: <ViewPsicologia />,
-    fisioterapia: <ViewFisioterapia />,
+    fisioterapia: <ViewFisioterapia usuario={usuario} />,
     fisiologia: <ViewFisiologia />,
     medicina: <ViewMedicina />,
     social: <ViewSocial />,
