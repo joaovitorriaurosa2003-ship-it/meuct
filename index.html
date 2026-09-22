@@ -1826,7 +1826,7 @@ function CruzamentoDados({ dados }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
-  const pontos = dados.atletas
+  const pontosBrutos = dados.atletas
     .map((a) => {
       const x = valorDoEixo(dados, a.id, eixoX);
       const y = valorDoEixo(dados, a.id, eixoY);
@@ -1837,9 +1837,39 @@ function CruzamentoDados({ dados }) {
     })
     .filter(Boolean);
 
+  // Agrupa atletas que caem exatamente no mesmo ponto (x,y) pra mostrar quantos são, em vez de esconder uns atrás dos outros.
+  const mapaPontos = {};
+  pontosBrutos.forEach((p) => {
+    const chave = `${p.x}|${p.y}`;
+    if (!mapaPontos[chave]) mapaPontos[chave] = { x: p.x, y: p.y, atletas: [] };
+    mapaPontos[chave].atletas.push({ nome: p.nome, fonteX: p.fonteX, fonteY: p.fonteY });
+  });
+  const pontos = Object.values(mapaPontos);
+
   useEffect(() => {
     if (!canvasRef.current) return;
     if (chartRef.current) chartRef.current.destroy();
+
+    const contagemPlugin = {
+      id: "contagemPontos",
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        meta.data.forEach((elemento, i) => {
+          const ponto = pontos[i];
+          if (!ponto || ponto.atletas.length < 2) return;
+          const pos = elemento.tooltipPosition ? elemento.tooltipPosition() : elemento;
+          ctx.save();
+          ctx.font = "bold 10px sans-serif";
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(String(ponto.atletas.length), pos.x, pos.y);
+          ctx.restore();
+        });
+      },
+    };
+
     chartRef.current = new Chart(canvasRef.current, {
       type: "scatter",
       data: {
@@ -1849,10 +1879,17 @@ function CruzamentoDados({ dados }) {
           backgroundColor: "#B8976A",
           borderColor: "#0A1F35",
           borderWidth: 1,
-          pointRadius: 6,
-          pointHoverRadius: 8,
+          pointRadius: (ctx) => {
+            const c = ctx.raw && ctx.raw.atletas ? ctx.raw.atletas.length : 1;
+            return Math.min(6 + (c - 1) * 2.5, 16);
+          },
+          pointHoverRadius: (ctx) => {
+            const c = ctx.raw && ctx.raw.atletas ? ctx.raw.atletas.length : 1;
+            return Math.min(8 + (c - 1) * 2.5, 18);
+          },
         }],
       },
+      plugins: [contagemPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -1862,9 +1899,11 @@ function CruzamentoDados({ dados }) {
             callbacks: {
               label: (ctx) => {
                 const p = ctx.raw;
-                const partX = p.fonteX ? `${labelDoEixo(eixoX)} (${p.fonteX}) = ${p.x}` : `${labelDoEixo(eixoX)} = ${p.x}`;
-                const partY = p.fonteY ? `${labelDoEixo(eixoY)} (${p.fonteY}) = ${p.y}` : `${labelDoEixo(eixoY)} = ${p.y}`;
-                return `${p.nome}: ${partX}, ${partY}`;
+                return p.atletas.map((a) => {
+                  const partX = a.fonteX ? `${labelDoEixo(eixoX)} (${a.fonteX}) = ${p.x}` : `${labelDoEixo(eixoX)} = ${p.x}`;
+                  const partY = a.fonteY ? `${labelDoEixo(eixoY)} (${a.fonteY}) = ${p.y}` : `${labelDoEixo(eixoY)} = ${p.y}`;
+                  return `${a.nome}: ${partX}, ${partY}`;
+                });
               },
             },
           },
@@ -1885,14 +1924,14 @@ function CruzamentoDados({ dados }) {
         <div className="cruzamento-x">×</div>
         <EixoPicker label="Eixo Y" dados={dados} config={eixoY} onChange={setEixoY} />
       </div>
-      {pontos.length === 0 ? (
+      {pontosBrutos.length === 0 ? (
         <div className="empty-state">Nenhum atleta tem os dois dados selecionados ao mesmo tempo — escolha outra combinação.</div>
       ) : (
         <React.Fragment>
           <div className="chart-box-wide" style={{marginTop:14}}>
             <canvas ref={canvasRef}></canvas>
           </div>
-          <div className="chart-controls-note" style={{marginTop:8}}>{pontos.length} atleta{pontos.length === 1 ? "" : "s"} com os dois valores disponíveis. Passe o mouse sobre um ponto pra ver quem é.</div>
+          <div className="chart-controls-note" style={{marginTop:8}}>{pontosBrutos.length} atleta{pontosBrutos.length === 1 ? "" : "s"} com os dois valores disponíveis, em {pontos.length} ponto{pontos.length === 1 ? "" : "s"}. O número dentro do ponto mostra quantos atletas têm esse mesmo resultado; passe o mouse pra ver quem são.</div>
         </React.Fragment>
       )}
     </div>
