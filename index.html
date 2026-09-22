@@ -158,18 +158,35 @@ input,select,textarea{font-family:inherit;}
 .embed-externo{height:100vh; display:flex; flex-direction:column;}
 .embed-iframe{flex:1; width:100%; border:none;}
 
+.menu-toggle-mobile{display:none;}
 @media (max-width: 860px){
   .app-shell{flex-direction:column;}
   .sidebar{
     width:100%; height:auto; position:sticky; top:0; flex-direction:row; align-items:center;
-    padding:10px 14px; overflow-x:auto; overflow-y:visible;
+    padding:10px 14px; overflow:visible; z-index:60;
   }
   .sidebar-brand{padding:4px 10px 4px 2px; flex-shrink:0;}
-  .sidebar-nav{flex-direction:row; flex:none;}
-  .sidebar-tab{white-space:nowrap; padding:8px 12px;}
-  .sidebar-tab.active{box-shadow:inset 0 -2px 0 var(--gold);}
-  .sidebar-foot{border-top:none; margin:0 0 0 8px; padding:0; flex-shrink:0;}
+  .menu-toggle-mobile{
+    display:flex; align-items:center; gap:9px; margin-left:auto; padding:9px 13px;
+    border-radius:9px; border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.07);
+    color:#fff; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;
+  }
+  .menu-toggle-mobile:active{background:rgba(255,255,255,0.14);}
+  .menu-toggle-icon{display:flex; flex-direction:column; gap:3px; width:16px; flex-shrink:0;}
+  .menu-toggle-icon span{display:block; height:2px; border-radius:2px; background:#fff;}
+  .sidebar-nav{
+    display:none; position:absolute; top:100%; left:14px; right:14px; margin-top:8px;
+    flex-direction:column; gap:3px; background:var(--navy-2); border-radius:12px;
+    padding:8px; box-shadow:0 14px 30px rgba(0,0,0,0.4); z-index:61; max-height:70vh; overflow-y:auto;
+  }
+  .sidebar-nav.mobile-open{display:flex;}
+  .sidebar-tab{white-space:normal; padding:12px 13px; font-size:14px;}
+  .sidebar-tab.active{box-shadow:none; background:rgba(184,151,106,0.22);}
+  .menu-backdrop-mobile{position:fixed; inset:0; background:rgba(10,31,53,0.45); z-index:59;}
+  .sidebar-foot{border-top:none; margin:0 0 0 8px; padding:0; flex-shrink:0; display:flex; align-items:center; gap:8px;}
   .admin-badge .label{display:none;}
+  .admin-badge{padding:6px;}
+  .sidebar-sair{width:auto; margin-top:0; padding:8px 10px;}
 }
 
 
@@ -818,76 +835,61 @@ const HUBS = [
 ];
 
 function HubBar({ current, onNavigate, usuario, onSair }) {
+  const [menuAberto, setMenuAberto] = useState(false);
   const iniciais = (usuario.nome || usuario.email || "?").trim().split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const hubsVisiveis = HUBS.filter((h) => temPermissao(usuario, h.id));
 
-  return React.createElement(
-    "div",
-    { className: "sidebar" },
-    React.createElement(
-      "div",
-      { className: "sidebar-brand" },
-      React.createElement("img", { src: ESCUDO_MEIA_NOITE, className: "crest-badge", alt: "Escudo do Meia Noite EC" }),
-      React.createElement(
-        "div",
-        { className: "sidebar-brand-text" },
-        React.createElement("span", { className: "clube" }, "Meia Noite EC"),
-        React.createElement("span", { className: "sistema" }, "CT Integrado")
-      )
-    ),
-    React.createElement(
-      "div",
-      { className: "sidebar-nav" },
-      React.createElement(
-        "button",
-        {
-          type: "button",
-          onClick: () => onNavigate("elenco"),
-          className: "sidebar-tab" + (current === "elenco" ? " active" : ""),
-        },
-        React.createElement("span", { className: "dot" }),
-        "Elenco"
-      ),
-      hubsVisiveis.map((h) =>
-        React.createElement(
-          "button",
-          {
-            key: h.id,
-            type: "button",
-            onClick: () => onNavigate(h.id),
-            className: "sidebar-tab" + (current === h.id ? " active" : ""),
-          },
-          React.createElement("span", { className: "dot" }),
-          h.label
-        )
-      ),
-      usuario.role === "admin" &&
-        React.createElement(
-          "button",
-          {
-            type: "button",
-            onClick: () => onNavigate("usuarios"),
-            className: "sidebar-tab" + (current === "usuarios" ? " active" : ""),
-          },
-          React.createElement("span", { className: "dot" }),
-          "Usuários"
-        )
-    ),
-    React.createElement(
-      "div",
-      { className: "sidebar-foot" },
-      React.createElement(
-        "div",
-        { className: "admin-badge" },
-        React.createElement("div", { className: "avatar" }, iniciais),
-        React.createElement(
-          "span",
-          { className: "label" },
-          (usuario.role === "admin" ? "Administrador" : "Colaborador") + " · " + (usuario.nome || usuario.email)
-        )
-      ),
-      React.createElement("button", { type: "button", className: "sidebar-sair", onClick: onSair }, "Sair")
-    )
+  const itensNav = [
+    { id: "elenco", label: "Elenco" },
+    ...hubsVisiveis.map((h) => ({ id: h.id, label: h.label })),
+    ...(usuario.role === "admin" ? [{ id: "usuarios", label: "Usuários" }] : []),
+  ];
+  const itemAtual = itensNav.find((it) => it.id === current);
+
+  function navegar(id) {
+    onNavigate(id);
+    setMenuAberto(false);
+  }
+
+  return (
+    <div className="sidebar">
+      <div className="sidebar-brand">
+        <img src={ESCUDO_MEIA_NOITE} className="crest-badge" alt="Escudo do Meia Noite EC" />
+        <div className="sidebar-brand-text">
+          <span className="clube">Meia Noite EC</span>
+          <span className="sistema">CT Integrado</span>
+        </div>
+      </div>
+
+      <button type="button" className="menu-toggle-mobile" onClick={() => setMenuAberto((v) => !v)}>
+        <span className="menu-toggle-icon"><span></span><span></span><span></span></span>
+        <span>{itemAtual ? itemAtual.label : "Menu"}</span>
+      </button>
+
+      <div className={"sidebar-nav" + (menuAberto ? " mobile-open" : "")}>
+        {itensNav.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            onClick={() => navegar(it.id)}
+            className={"sidebar-tab" + (current === it.id ? " active" : "")}
+          >
+            <span className="dot"></span>
+            {it.label}
+          </button>
+        ))}
+      </div>
+
+      {menuAberto && <div className="menu-backdrop-mobile" onClick={() => setMenuAberto(false)}></div>}
+
+      <div className="sidebar-foot">
+        <div className="admin-badge">
+          <div className="avatar">{iniciais}</div>
+          <span className="label">{(usuario.role === "admin" ? "Administrador" : "Colaborador") + " · " + (usuario.nome || usuario.email)}</span>
+        </div>
+        <button type="button" className="sidebar-sair" onClick={onSair}>Sair</button>
+      </div>
+    </div>
   );
 }
 
@@ -4158,7 +4160,7 @@ function PainelUsuarios({ usuarioAtual }) {
   );
 }
 
-const URL_DASHBOARD_DESEMPENHO = "https://dashboard-desempenho-meia-noite.fadadalt7.chatgpt.site/";
+const URL_DASHBOARD_DESEMPENHO = "https://desempenho.meianoitesaf.com.br/";
 
 function EmbedExterno({ url, titulo }) {
   return (
