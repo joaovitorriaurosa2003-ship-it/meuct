@@ -21,6 +21,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{
   --navy: #0A1F35;
@@ -529,6 +531,43 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 }
 .print-only{display:none;}
 @media print{ .print-only{display:block;} }
+
+/* ---------- Central de Relatórios ---------- */
+.relatorio-filtros-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;}
+.relatorio-preview-wrap{overflow:auto; background:#e9edf2; padding:24px; border-radius:12px;}
+.relatorio-folha{background:#fff; color:#1a1a1a; width:794px; max-width:100%; margin:0 auto; padding:34px 38px; font-family:'Barlow', sans-serif;}
+.relatorio-cabecalho{display:flex; align-items:center; gap:14px; border-bottom:2px solid var(--navy); padding-bottom:10px; margin-bottom:14px;}
+.relatorio-cabecalho img{width:46px; height:46px; object-fit:contain;}
+.relatorio-cabecalho .depto{font-size:11.5px; font-weight:800; color:var(--navy); letter-spacing:0.4px; text-transform:uppercase;}
+.relatorio-cabecalho .clube{font-size:11px; color:var(--muted);}
+.relatorio-titulo{text-align:center; margin:4px 0 14px;}
+.relatorio-titulo h1{font-size:18.5px; font-weight:800; color:var(--navy); letter-spacing:0.2px; margin-bottom:2px;}
+.relatorio-titulo .subtitulo{font-size:12px; font-style:italic; color:var(--muted);}
+.relatorio-info-table{width:100%; border-collapse:collapse; margin-bottom:14px; font-size:12.5px;}
+.relatorio-info-table td{border:1px solid #999; padding:5px 10px;}
+.relatorio-info-table td:first-child{font-weight:700; background:#f2f2f2; width:190px;}
+.relatorio-secao-titulo{font-size:12.5px; font-weight:800; color:var(--navy); text-transform:uppercase; letter-spacing:0.3px; margin:16px 0 6px; border-bottom:1px solid var(--line-soft); padding-bottom:3px;}
+.relatorio-resumo-texto{font-size:12.5px; line-height:1.55; margin-bottom:4px;}
+.relatorio-atencao-box{border:1px solid var(--amarelo); background:var(--amarelo-bg); border-radius:6px; padding:9px 13px; margin-bottom:7px;}
+.relatorio-atencao-box .item-titulo{font-weight:700; color:var(--navy); font-size:12.5px; margin-bottom:2px;}
+.relatorio-atencao-box .item-corpo{font-size:11.8px; color:#333; line-height:1.45;}
+.relatorio-tabela{width:100%; border-collapse:collapse; font-size:11.3px; margin-bottom:8px;}
+.relatorio-tabela th, .relatorio-tabela td{border:1px solid #999; padding:6px 8px; text-align:left; vertical-align:top;}
+.relatorio-tabela th{background:var(--navy); color:#fff; font-size:10.8px; text-transform:uppercase; letter-spacing:0.2px;}
+.relatorio-tabela tr:nth-child(even) td{background:#f7f7f7;}
+.relatorio-resumo-lista{font-size:12px; margin-top:2px;}
+.relatorio-resumo-item{display:flex; align-items:center; gap:9px; border:1px solid #ddd; border-radius:4px; padding:6px 10px; margin-bottom:4px;}
+.relatorio-resumo-item .ponto{width:11px; height:11px; border-radius:50%; flex-shrink:0;}
+.relatorio-resumo-item .ponto.verde{background:var(--verde);}
+.relatorio-resumo-item .ponto.amarelo{background:var(--amarelo);}
+.relatorio-resumo-item .ponto.vermelho{background:var(--vermelho);}
+.relatorio-resumo-item b{color:var(--navy);}
+.relatorio-resumo-item .categoria-tag{color:var(--muted); font-size:11px;}
+.relatorio-grafico-box{margin:8px 0 18px; height:230px; position:relative;}
+.relatorio-assinatura{text-align:center; margin-top:30px; font-size:12px;}
+.relatorio-assinatura .linha{border-top:1px solid #999; width:270px; margin:0 auto 4px; padding-top:4px; font-weight:700; color:var(--navy);}
+.relatorio-assinatura .cargo{color:var(--muted); font-size:11.5px;}
+.relatorio-rodape{text-align:center; font-size:10px; color:var(--muted); margin-top:20px; border-top:1px solid #ddd; padding-top:8px;}
 </style>
 </head>
 <body>
@@ -589,6 +628,12 @@ const GRUPOS_ACESSO = [
   { id: "dm", label: "Departamento Médico", modulos: ["fisioterapia", "fisiologia", "medicina", "psicologia"] },
   { id: "grupo_social", label: "Social", modulos: ["psicologia", "social"] },
 ];
+
+/** Módulos de dados que alimentam a Central de Relatórios — quem tem acesso a qualquer um deles pode gerar relatório daquele módulo. */
+const MODULOS_RELATORIO = ["psicologia", "fisioterapia", "fisiologia", "medicina", "social", "desempenho"];
+function temAcessoRelatorios(usuario) {
+  return temPermissao(usuario, "admin") || MODULOS_RELATORIO.some((m) => temPermissao(usuario, m));
+}
 
 /** Cria a conta e o documento de permissão (pendente, exceto o e-mail fundador). */
 async function cadastrar(email, senha, nome) {
@@ -852,6 +897,14 @@ function calcularKpisFisio(fisioData, atletas) {
 /* ---------- Medicina: PPE, afastamento clínico, concussão, TUE, crescimento ---------- */
 const MOTIVOS_AFASTAMENTO_CLINICO = ["Infecção respiratória (gripe/resfriado)", "Gastroenterite", "Infecção de pele/ferimento", "Febre / mal-estar geral", "Outra condição clínica"];
 const RESULTADOS_TRIAGEM_CARDIACA = ["Normal", "Alterado — encaminhado ao cardiologista", "Não realizado"];
+/** Atendimento de ambulatório (consulta pontual) — base do Relatório Diário de Atendimentos Médicos. */
+const DESFECHOS_ATENDIMENTO = [
+  { id: "liberado", label: "Liberado para treino/jogo" },
+  { id: "restricao", label: "Restrição/orientação e acompanhamento" },
+  { id: "afastado", label: "Afastado das atividades" },
+];
+function labelDesfechoAtendimento(id) { const d = DESFECHOS_ATENDIMENTO.find((x) => x.id === id); return d ? d.label : (id || "—"); }
+function sinalPorDesfecho(id) { return id === "liberado" ? "verde" : id === "afastado" ? "vermelho" : "amarelo"; }
 const FASES_CONCUSSAO = [
   { id: "retirado", label: "Retirado de campo (avaliação aguda)" },
   { id: "repouso", label: "Repouso físico e cognitivo" },
@@ -991,10 +1044,13 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
   const idsAgrupados = new Set(GRUPOS_ACESSO.flatMap((g) => g.modulos));
   const itensSoltos = hubsVisiveis.filter((h) => !idsAgrupados.has(h.id));
 
+  const podeRelatorios = temAcessoRelatorios(usuario);
+
   const itensNav = [
     { id: "elenco", label: "Elenco" },
     ...itensSoltos.map((h) => ({ id: h.id, label: h.label })),
     ...gruposMenu.flatMap((g) => g.itens),
+    ...(podeRelatorios ? [{ id: "relatorios", label: "Relatórios" }] : []),
     ...(usuario.role === "admin" ? [{ id: "usuarios", label: "Usuários" }] : []),
   ];
   const itemAtual = itensNav.find((it) => it.id === current);
@@ -1077,6 +1133,17 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
             )}
           </div>
         ))}
+
+        {podeRelatorios && (
+          <button
+            type="button"
+            onClick={() => navegar("relatorios")}
+            className={"sidebar-tab" + (current === "relatorios" ? " active" : "")}
+          >
+            <span className="dot"></span>
+            Relatórios
+          </button>
+        )}
 
         {usuario.role === "admin" && (
           <button
@@ -3812,6 +3879,96 @@ function FormMedicinaCrescimento({ atletas, onSalvar, onCancelar }) {
   );
 }
 
+function FormMedicinaAtendimento({ atletas, onSalvar, onCancelar }) {
+  const agora = new Date();
+  const horarioInicial = `${String(agora.getHours()).padStart(2, "0")}:${String(agora.getMinutes()).padStart(2, "0")}`;
+  const [atletaId, setAtletaId] = useState(atletas[0] ? atletas[0].id : "");
+  const [data, setData] = useState(hojeISO());
+  const [horario, setHorario] = useState(horarioInicial);
+  const [queixaPrincipal, setQueixaPrincipal] = useState("");
+  const [hipoteseDiagnostica, setHipoteseDiagnostica] = useState("");
+  const [conduta, setConduta] = useState("");
+  const [desfecho, setDesfecho] = useState(DESFECHOS_ATENDIMENTO[0].id);
+  const [pontoAtencao, setPontoAtencao] = useState(false);
+  const [notaAtencao, setNotaAtencao] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function handleSubmit() {
+    if (!atletaId || !queixaPrincipal.trim() || salvando) return;
+    setSalvando(true);
+    try {
+      await onSalvar(atletaId, {
+        tipo: "Atendimento",
+        data, horario,
+        queixa_principal: queixaPrincipal.trim(),
+        hipotese_diagnostica: hipoteseDiagnostica.trim(),
+        conduta: conduta.trim(),
+        desfecho,
+        ponto_atencao: pontoAtencao,
+        nota_atencao: pontoAtencao ? notaAtencao.trim() : "",
+        nota: queixaPrincipal.trim(),
+        sinal: sinalPorDesfecho(desfecho),
+      });
+      setQueixaPrincipal(""); setHipoteseDiagnostica(""); setConduta(""); setDesfecho(DESFECHOS_ATENDIMENTO[0].id);
+      setPontoAtencao(false); setNotaAtencao("");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="form-panel">
+      <div className="form-grid">
+        <div className="field">
+          <label>Atleta</label>
+          <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Data</label>
+          <input type="date" value={data} onChange={e => setData(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Horário</label>
+          <input type="time" value={horario} onChange={e => setHorario(e.target.value)} />
+        </div>
+      </div>
+      <div className="form-grid full">
+        <div className="field"><label>Queixa principal</label><textarea value={queixaPrincipal} onChange={e => setQueixaPrincipal(e.target.value)} placeholder="Ex.: dor de garganta há 5 dias, com disfagia e coriza nasal" /></div>
+      </div>
+      <div className="form-grid">
+        <div className="field"><label>Hipótese diagnóstica</label><input type="text" value={hipoteseDiagnostica} onChange={e => setHipoteseDiagnostica(e.target.value)} placeholder="Ex.: Influenza (gripe viral) (J11)" /></div>
+        <div className="field">
+          <label>Desfecho</label>
+          <select value={desfecho} onChange={e => setDesfecho(e.target.value)}>
+            {DESFECHOS_ATENDIMENTO.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="form-grid full">
+        <div className="field"><label>Conduta / encaminhamento</label><textarea value={conduta} onChange={e => setConduta(e.target.value)} placeholder="Ex.: liberado, orientados sinais de alarme e investigação complementar se recorrência" /></div>
+      </div>
+      <div className="form-grid full">
+        <label style={{display:"flex", alignItems:"center", gap:8, fontSize:13, fontWeight:600, color:"var(--navy)", cursor:"pointer"}}>
+          <input type="checkbox" checked={pontoAtencao} onChange={e => setPontoAtencao(e.target.checked)} style={{width:16, height:16}} />
+          Marcar como ponto de atenção no relatório
+        </label>
+      </div>
+      {pontoAtencao && (
+        <div className="form-grid full">
+          <div className="field"><label>Detalhe do ponto de atenção</label><textarea value={notaAtencao} onChange={e => setNotaAtencao(e.target.value)} placeholder="O que a coordenação precisa saber sobre esse caso" /></div>
+        </div>
+      )}
+      <div className="form-actions">
+        <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
+        <button className="pill-btn primary" onClick={handleSubmit} disabled={!atletaId || !queixaPrincipal.trim() || salvando}>{salvando ? "Salvando..." : "Salvar atendimento"}</button>
+      </div>
+      <div className="save-note"><span>Esses atendimentos alimentam o Relatório Diário de Atendimentos Médicos na Central de Relatórios.</span></div>
+    </div>
+  );
+}
+
 /* ---------- Importador de CSV de análise de jogo ---------- */
 
 function dataBrTracoParaIso(dataBr) {
@@ -4539,7 +4696,7 @@ function ViewMedicina() {
   const [registros, setRegistros] = useState({});
   const [erro, setErro] = useState(null);
   const [formAberto, setFormAberto] = useState(false);
-  const [tipoForm, setTipoForm] = useState("PPE");
+  const [tipoForm, setTipoForm] = useState("Atendimento");
   const [toast, setToast] = useState(null);
 
   async function carregar() {
@@ -4729,9 +4886,10 @@ function ViewMedicina() {
               </div>
               {formAberto && (
                 <div style={{padding:"14px 20px 0"}}>
-                  <TabSelect opcoes={["PPE", "Afastamento clínico", "Concussão", "TUE", "Crescimento"]} valor={tipoForm} onChange={setTipoForm} tamanho="sm" />
+                  <TabSelect opcoes={["Atendimento", "PPE", "Afastamento clínico", "Concussão", "TUE", "Crescimento"]} valor={tipoForm} onChange={setTipoForm} tamanho="sm" />
                 </div>
               )}
+              {formAberto && tipoForm === "Atendimento" && <FormMedicinaAtendimento atletas={atletas} onSalvar={adicionar} onCancelar={() => setFormAberto(false)} />}
               {formAberto && tipoForm === "PPE" && <FormMedicinaPPE atletas={atletas} onSalvar={adicionar} onCancelar={() => setFormAberto(false)} />}
               {formAberto && tipoForm === "Afastamento clínico" && <FormMedicinaAfastamento atletas={atletas} onSalvar={adicionar} onCancelar={() => setFormAberto(false)} />}
               {formAberto && tipoForm === "Concussão" && <FormMedicinaConcussao atletas={atletas} onSalvar={adicionar} onCancelar={() => setFormAberto(false)} />}
@@ -5214,6 +5372,617 @@ function EmbedExterno({ url, titulo }) {
   );
 }
 
+/* ==================== Central de Relatórios ==================== */
+
+/** Verifica se uma data ISO ("YYYY-MM-DD") cai dentro do período escolhido nos filtros do relatório. */
+function dataNoPeriodo(dataIso, filtros) {
+  if (!dataIso) return false;
+  if (filtros.tipoPeriodo === "dia") return dataIso === filtros.dataDia;
+  return dataIso >= filtros.dataInicio && dataIso <= filtros.dataFim;
+}
+
+/** Relatório de Medicina — usa só os registros do tipo "Atendimento" (consultas de ambulatório), no molde do relatório diário de referência. */
+function construirRelatorioMedicina(registros, atletas, filtros) {
+  const linhas = [];
+  atletas.forEach((a) => {
+    if (filtros.atletaId && filtros.atletaId !== a.id) return;
+    if (filtros.categoria && normalizarCategoria(a.categoria) !== filtros.categoria) return;
+    (registros[a.id] || []).forEach((r) => {
+      if (r.tipo !== "Atendimento") return;
+      if (!dataNoPeriodo(r.data, filtros)) return;
+      if (filtros.status && r.desfecho !== filtros.status) return;
+      linhas.push({ atleta: a, registro: r });
+    });
+  });
+  linhas.sort((x, y) => (x.registro.data + (x.registro.horario || "")).localeCompare(y.registro.data + (y.registro.horario || "")));
+
+  const total = linhas.length;
+  const porDesfecho = { liberado: 0, restricao: 0, afastado: 0 };
+  linhas.forEach(({ registro }) => { porDesfecho[registro.desfecho] = (porDesfecho[registro.desfecho] || 0) + 1; });
+
+  const resumoTexto = total === 0
+    ? "Nenhum atendimento registrado no período selecionado."
+    : `Foram realizados ${total} atendimento${total === 1 ? "" : "s"} no ambulatório médico. Desfechos: ${porDesfecho.liberado} liberado(s) para treino/jogo, ${porDesfecho.restricao} com restrição/orientação e acompanhamento e ${porDesfecho.afastado} afastado(s) das atividades.`;
+
+  const pontosAtencao = linhas
+    .filter(({ registro }) => registro.ponto_atencao)
+    .map(({ atleta, registro }) => ({
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"})${registro.horario ? " — " + registro.horario : ""}`,
+      corpo: registro.nota_atencao || registro.conduta || registro.queixa_principal,
+    }));
+
+  const colunasDetalhe = ["Horário", "Atleta", "Categoria", "Queixa Principal", "Hipótese Diagnóstica", "Conduta / Encaminhamento"];
+  const linhasDetalhe = linhas.map(({ atleta, registro }) => [
+    registro.horario || "—",
+    nomeExibicao(atleta) + (registro.ponto_atencao ? " ⚠" : ""),
+    atleta.categoria || "—",
+    registro.queixa_principal || "—",
+    registro.hipotese_diagnostica || "—",
+    registro.conduta || "—",
+  ]);
+
+  const resumoColorido = linhas.map(({ atleta, registro }) => ({
+    sinal: sinalPorDesfecho(registro.desfecho),
+    nome: nomeExibicao(atleta),
+    categoria: atleta.categoria || "—",
+    texto: registro.conduta || labelDesfechoAtendimento(registro.desfecho),
+  }));
+
+  const grafico = total > 0 ? {
+    titulo: "Atendimentos por desfecho",
+    tipo: "bar",
+    labels: ["Liberado", "Restrição/orientação", "Afastado"],
+    dados: [porDesfecho.liberado, porDesfecho.restricao, porDesfecho.afastado],
+    cores: ["#4C8B63", "#B5883A", "#A6473C"],
+  } : null;
+
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+}
+
+/** Relatório de Fisioterapia — agrupa por episódio de lesão (mesmo agrupamento do painel), restrito aos episódios com alguma movimentação no período. */
+function construirRelatorioFisioterapia(registros, atletas, filtros) {
+  const linhas = [];
+  atletas.forEach((a) => {
+    if (filtros.atletaId && filtros.atletaId !== a.id) return;
+    if (filtros.categoria && normalizarCategoria(a.categoria) !== filtros.categoria) return;
+    const episodios = calcularEpisodiosLesao(registros[a.id]);
+    episodios.forEach((ep) => {
+      const teveAtividadeNoPeriodo = ep.registros.some((r) => dataNoPeriodo(r.data, filtros));
+      if (!teveAtividadeNoPeriodo) return;
+      if (filtros.status === "ativo" && !ep.ativo) return;
+      if (filtros.status === "liberado" && ep.ativo) return;
+      linhas.push({ atleta: a, episodio: ep });
+    });
+  });
+
+  const total = linhas.length;
+  const ativos = linhas.filter(({ episodio }) => episodio.ativo).length;
+  const reincidentes = linhas.filter(({ episodio }) => episodio.reincidente).length;
+
+  const resumoTexto = total === 0
+    ? "Nenhum episódio de lesão com atividade no período selecionado."
+    : `${total} episódio${total === 1 ? "" : "s"} de lesão com atividade no período, sendo ${ativos} ainda ativo${ativos === 1 ? "" : "s"} e ${reincidentes} reincidente${reincidentes === 1 ? "" : "s"}.`;
+
+  const pontosAtencao = linhas
+    .filter(({ episodio }) => episodio.gravidade === "grave" || episodio.reincidente)
+    .map(({ atleta, episodio }) => ({
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"}) — ${episodio.regiao}`,
+      corpo: `${episodio.reincidente ? "Lesão reincidente. " : ""}Gravidade ${episodio.gravidade || "não informada"}, fase atual: ${labelFaseRtp(episodio.faseAtual)}.`,
+    }));
+
+  const colunasDetalhe = ["Atleta", "Categoria", "Região", "Gravidade", "Fase RTP", "Dias desde o início", "Reincidente", "Avaliador"];
+  const linhasDetalhe = linhas.map(({ atleta, episodio }) => [
+    nomeExibicao(atleta),
+    atleta.categoria || "—",
+    episodio.regiao,
+    episodio.gravidade || "—",
+    labelFaseRtp(episodio.faseAtual),
+    String(calcularDiasEntre(episodio.dataInicio) || 0),
+    episodio.reincidente ? "Sim" : "Não",
+    (episodio.registros[0] && episodio.registros[0].avaliador) || "—",
+  ]);
+
+  const resumoColorido = linhas.map(({ atleta, episodio }) => ({
+    sinal: episodio.faseAtual === "liberado" ? "verde" : episodio.gravidade === "grave" ? "vermelho" : "amarelo",
+    nome: nomeExibicao(atleta),
+    categoria: atleta.categoria || "—",
+    texto: `${episodio.regiao} — ${labelFaseRtp(episodio.faseAtual)}`,
+  }));
+
+  const porRegiao = {};
+  linhas.forEach(({ episodio }) => { porRegiao[episodio.regiao] = (porRegiao[episodio.regiao] || 0) + 1; });
+  const grafico = total > 0 ? {
+    titulo: "Episódios por região",
+    tipo: "bar",
+    labels: Object.keys(porRegiao),
+    dados: Object.values(porRegiao),
+    cores: "#B8976A",
+  } : null;
+
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+}
+
+/** Relatório genérico (Fisiologia, Psicologia, Desempenho) — registros simples com campo "sinal" (verde/amarelo/vermelho). */
+function construirRelatorioGenerico(registros, atletas, filtros, opts) {
+  const linhas = [];
+  atletas.forEach((a) => {
+    if (filtros.atletaId && filtros.atletaId !== a.id) return;
+    if (filtros.categoria && normalizarCategoria(a.categoria) !== filtros.categoria) return;
+    (registros[a.id] || []).forEach((r) => {
+      if (!dataNoPeriodo(r.data, filtros)) return;
+      if (filtros.status && (r.sinal || "neutro") !== filtros.status) return;
+      linhas.push({ atleta: a, registro: r });
+    });
+  });
+  linhas.sort((x, y) => (y.registro.data || "").localeCompare(x.registro.data || ""));
+
+  const total = linhas.length;
+  const porSinal = { verde: 0, amarelo: 0, vermelho: 0, neutro: 0 };
+  linhas.forEach(({ registro }) => { const s = registro.sinal || "neutro"; porSinal[s] = (porSinal[s] || 0) + 1; });
+
+  const resumoTexto = total === 0
+    ? `Nenhum ${opts.itemSingular} registrado no período selecionado.`
+    : `${total} ${total === 1 ? opts.itemSingular : opts.itemPlural} no período. Sinais: ${porSinal.verde} regular(es), ${porSinal.amarelo} em atenção e ${porSinal.vermelho} prioritário(s).`;
+
+  const pontosAtencao = linhas
+    .filter(({ registro }) => registro.sinal === "vermelho")
+    .map(({ atleta, registro }) => ({
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"}) — ${formatarData(registro.data)}`,
+      corpo: registro.nota || registro.tipo || "—",
+    }));
+
+  const colunasDetalhe = ["Data", "Atleta", "Categoria", "Tipo", "Observação", "Sinal"];
+  const linhasDetalhe = linhas.map(({ atleta, registro }) => [
+    formatarData(registro.data),
+    nomeExibicao(atleta),
+    atleta.categoria || "—",
+    registro.tipo || "—",
+    registro.nota || "—",
+    registro.sinal === "verde" ? "Regular" : registro.sinal === "amarelo" ? "Atenção" : registro.sinal === "vermelho" ? "Prioridade" : "Informativo",
+  ]);
+
+  const resumoColorido = linhas.map(({ atleta, registro }) => ({
+    sinal: registro.sinal === "vermelho" ? "vermelho" : registro.sinal === "amarelo" ? "amarelo" : "verde",
+    nome: nomeExibicao(atleta),
+    categoria: atleta.categoria || "—",
+    texto: registro.tipo || "—",
+  }));
+
+  const grafico = total > 0 ? {
+    titulo: "Distribuição por sinal",
+    tipo: "doughnut",
+    labels: ["Regular", "Atenção", "Prioridade"],
+    dados: [porSinal.verde, porSinal.amarelo, porSinal.vermelho],
+    cores: ["#4C8B63", "#B5883A", "#A6473C"],
+  } : null;
+
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+}
+
+/** Relatório de Serviço Social — usa o campo statusPublico ("ativo"/"atencao") em vez de "sinal". */
+function construirRelatorioSocial(registros, atletas, filtros) {
+  const linhas = [];
+  atletas.forEach((a) => {
+    if (filtros.atletaId && filtros.atletaId !== a.id) return;
+    if (filtros.categoria && normalizarCategoria(a.categoria) !== filtros.categoria) return;
+    (registros[a.id] || []).forEach((r) => {
+      if (!dataNoPeriodo(r.data, filtros)) return;
+      if (filtros.status && r.statusPublico !== filtros.status) return;
+      linhas.push({ atleta: a, registro: r });
+    });
+  });
+  linhas.sort((x, y) => (y.registro.data || "").localeCompare(x.registro.data || ""));
+
+  const total = linhas.length;
+  const emAtencao = linhas.filter(({ registro }) => registro.statusPublico === "atencao").length;
+
+  const resumoTexto = total === 0
+    ? "Nenhum acompanhamento registrado no período selecionado."
+    : `${total} acompanhamento${total === 1 ? "" : "s"} no período, sendo ${emAtencao} em atenção.`;
+
+  const pontosAtencao = linhas
+    .filter(({ registro }) => registro.statusPublico === "atencao")
+    .map(({ atleta, registro }) => ({
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"}) — ${formatarData(registro.data)}`,
+      corpo: registro.detalhe || registro.tipo || "—",
+    }));
+
+  const colunasDetalhe = ["Data", "Atleta", "Categoria", "Tipo", "Status", "Detalhe"];
+  const linhasDetalhe = linhas.map(({ atleta, registro }) => [
+    formatarData(registro.data),
+    nomeExibicao(atleta),
+    atleta.categoria || "—",
+    registro.tipo || "—",
+    registro.statusPublico === "atencao" ? "Em atenção" : "Ativo",
+    registro.detalhe || "—",
+  ]);
+
+  const resumoColorido = linhas.map(({ atleta, registro }) => ({
+    sinal: registro.statusPublico === "atencao" ? "amarelo" : "verde",
+    nome: nomeExibicao(atleta),
+    categoria: atleta.categoria || "—",
+    texto: registro.tipo || "—",
+  }));
+
+  const grafico = total > 0 ? {
+    titulo: "Acompanhamentos por status",
+    tipo: "doughnut",
+    labels: ["Ativo", "Em atenção"],
+    dados: [total - emAtencao, emAtencao],
+    cores: ["#4C8B63", "#B5883A"],
+  } : null;
+
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+}
+
+/** Configuração de cada módulo disponível na Central de Relatórios: rótulos, subcoleção de origem e função que monta o conteúdo. */
+const CONFIG_RELATORIO_MODULO = {
+  medicina: {
+    label: "Medicina",
+    subcol: "medicina",
+    titulo: "RELATÓRIO DE ATENDIMENTOS MÉDICOS",
+    subtituloDept: "Departamento Médico — Comunicação à Coordenação",
+    totalLabel: "Total de Atendimentos",
+    statusOpcoes: DESFECHOS_ATENDIMENTO.map((d) => ({ id: d.id, label: d.label })),
+    construir: construirRelatorioMedicina,
+  },
+  fisioterapia: {
+    label: "Fisioterapia",
+    subcol: "fisio",
+    titulo: "RELATÓRIO DE FISIOTERAPIA",
+    subtituloDept: "Fisioterapia — Comunicação à Coordenação",
+    totalLabel: "Episódios com atividade no período",
+    statusOpcoes: [{ id: "ativo", label: "Ativo" }, { id: "liberado", label: "Liberado" }],
+    construir: construirRelatorioFisioterapia,
+  },
+  fisiologia: {
+    label: "Fisiologia",
+    subcol: "fisio",
+    titulo: "RELATÓRIO DE FISIOLOGIA",
+    subtituloDept: "Fisiologia — Comunicação à Coordenação",
+    totalLabel: "Total de registros",
+    statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
+    construir: (regs, atletas, filtros) => construirRelatorioGenerico(regs, atletas, filtros, { itemSingular: "registro", itemPlural: "registros" }),
+  },
+  psicologia: {
+    label: "Psicologia",
+    subcol: "psi",
+    titulo: "RELATÓRIO DE PSICOLOGIA",
+    subtituloDept: "Psicologia — Comunicação à Coordenação",
+    totalLabel: "Total de avaliações",
+    statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
+    construir: (regs, atletas, filtros) => construirRelatorioGenerico(regs, atletas, filtros, { itemSingular: "avaliação", itemPlural: "avaliações" }),
+  },
+  social: {
+    label: "Serviço Social",
+    subcol: "social",
+    titulo: "RELATÓRIO DE SERVIÇO SOCIAL",
+    subtituloDept: "Serviço Social — Comunicação à Coordenação",
+    totalLabel: "Total de acompanhamentos",
+    statusOpcoes: [{ id: "ativo", label: "Ativo" }, { id: "atencao", label: "Em atenção" }],
+    construir: construirRelatorioSocial,
+  },
+  desempenho: {
+    label: "Desempenho",
+    subcol: "performance",
+    titulo: "RELATÓRIO DE DESEMPENHO",
+    subtituloDept: "Desempenho — Comunicação à Coordenação",
+    totalLabel: "Total de registros",
+    statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
+    construir: (regs, atletas, filtros) => construirRelatorioGenerico(regs, atletas, filtros, { itemSingular: "registro", itemPlural: "registros" }),
+  },
+};
+
+/** Gráfico embutido no relatório — desenhado num canvas Chart.js real, que o html2canvas captura junto do resto da folha na hora de gerar o PDF. */
+function MiniChartRelatorio({ grafico }) {
+  const { useRef, useEffect } = React;
+  const canvasRef = useRef(null);
+  const chartRef = useRef(null);
+
+  useEffect(() => {
+    if (!canvasRef.current || !grafico) return;
+    if (chartRef.current) chartRef.current.destroy();
+    chartRef.current = new Chart(canvasRef.current, {
+      type: grafico.tipo || "bar",
+      data: {
+        labels: grafico.labels,
+        datasets: [{ data: grafico.dados, backgroundColor: grafico.cores, borderColor: "#0A1F35", borderWidth: 1 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { display: grafico.tipo === "doughnut", position: "bottom", labels: { font: { size: 11 }, boxWidth: 12 } },
+        },
+        scales: grafico.tipo === "doughnut" ? undefined : {
+          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+          x: { ticks: { font: { size: 10.5 } } },
+        },
+      },
+    });
+    return () => { if (chartRef.current) chartRef.current.destroy(); };
+  }, [JSON.stringify(grafico)]);
+
+  if (!grafico) return null;
+  return <div className="relatorio-grafico-box"><canvas ref={canvasRef}></canvas></div>;
+}
+
+/** Folha do relatório — layout fixo (cabeçalho com escudo, tabela de info, pontos de atenção, gráfico, tabela detalhada, resumo colorido, assinatura), igual pro PDF quanto pra tela. */
+function RelatorioModelo({ innerRef, titulo, subtitulo, periodoLabel, destinatario, totalLabel, totalValor, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico, responsavelNome, responsavelRegistro, responsavelCargo }) {
+  return (
+    <div className="relatorio-folha" ref={innerRef}>
+      <div className="relatorio-cabecalho">
+        <img src={ESCUDO_MEIA_NOITE} alt="Escudo Meia Noite EC" />
+        <div>
+          <div className="depto">{subtitulo}</div>
+          <div className="clube">EC Meia Noite SAF</div>
+        </div>
+      </div>
+      <div className="relatorio-titulo">
+        <h1>{titulo}</h1>
+        <div className="subtitulo">{subtitulo}</div>
+      </div>
+      <table className="relatorio-info-table">
+        <tbody>
+          <tr><td>Período</td><td>{periodoLabel}</td></tr>
+          <tr><td>Destinatário</td><td>{destinatario}</td></tr>
+          <tr><td>{totalLabel}</td><td>{totalValor}</td></tr>
+        </tbody>
+      </table>
+
+      <div className="relatorio-secao-titulo">Resumo do período</div>
+      <div className="relatorio-resumo-texto">{resumoTexto}</div>
+
+      {pontosAtencao.length > 0 && (
+        <React.Fragment>
+          <div className="relatorio-secao-titulo">⚠ Pontos de atenção</div>
+          {pontosAtencao.map((p, i) => (
+            <div className="relatorio-atencao-box" key={i}>
+              <div className="item-titulo">{p.titulo}</div>
+              <div className="item-corpo">{p.corpo}</div>
+            </div>
+          ))}
+        </React.Fragment>
+      )}
+
+      {grafico && (
+        <React.Fragment>
+          <div className="relatorio-secao-titulo">{grafico.titulo}</div>
+          <MiniChartRelatorio grafico={grafico} />
+        </React.Fragment>
+      )}
+
+      <div className="relatorio-secao-titulo">Detalhamento</div>
+      <table className="relatorio-tabela">
+        <thead><tr>{colunasDetalhe.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
+        <tbody>
+          {linhasDetalhe.length === 0 ? (
+            <tr><td colSpan={colunasDetalhe.length} style={{ textAlign: "center", color: "#888" }}>Nenhum registro no período selecionado.</td></tr>
+          ) : linhasDetalhe.map((linha, i) => (
+            <tr key={i}>{linha.map((cel, j) => <td key={j}>{cel}</td>)}</tr>
+          ))}
+        </tbody>
+      </table>
+
+      {resumoColorido.length > 0 && (
+        <React.Fragment>
+          <div className="relatorio-secao-titulo">Resumo prático — leitura rápida por atleta</div>
+          <div className="relatorio-resumo-lista">
+            {resumoColorido.map((r, i) => (
+              <div className="relatorio-resumo-item" key={i}>
+                <span className={"ponto " + r.sinal}></span>
+                <b>{r.nome}</b> <span className="categoria-tag">{r.categoria}</span>
+                <span style={{ marginLeft: "auto", color: "#444" }}>{r.texto}</span>
+              </div>
+            ))}
+          </div>
+        </React.Fragment>
+      )}
+
+      <div className="relatorio-assinatura">
+        <div className="linha">{responsavelNome || "—"}</div>
+        {responsavelRegistro && <div className="cargo">{responsavelRegistro}</div>}
+        <div className="cargo">{responsavelCargo || ""}</div>
+      </div>
+      <div className="relatorio-rodape">CT Integrado · Meia Noite EC · Gerado em {formatarData(hojeISO())}</div>
+    </div>
+  );
+}
+
+/** Renderiza o elemento em canvas (html2canvas) e monta um PDF A4 paginado (jsPDF), disparando o download direto. */
+async function baixarRelatorioPDF(elemento, nomeArquivo) {
+  const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+  const imgData = canvas.toDataURL("image/png");
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgWidth = pageWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let heightLeft = imgHeight;
+  let position = 0;
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while (heightLeft > 0) {
+    position -= pageHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+  pdf.save(nomeArquivo);
+}
+
+function CentralRelatorios({ usuario }) {
+  const { useState, useEffect, useRef } = React;
+  const modulosPermitidos = MODULOS_RELATORIO.filter((m) => temPermissao(usuario, m));
+  const [moduloId, setModuloId] = useState(modulosPermitidos[0] || "");
+  const [tipoPeriodo, setTipoPeriodo] = useState("dia");
+  const [dataDia, setDataDia] = useState(hojeISO());
+  const [dataInicio, setDataInicio] = useState(hojeISO());
+  const [dataFim, setDataFim] = useState(hojeISO());
+  const [atletaId, setAtletaId] = useState("");
+  const [categoria, setCategoria] = useState("");
+  const [status, setStatus] = useState("");
+  const [destinatario, setDestinatario] = useState("Coordenação do Setor de Futebol");
+  const [responsavelNome, setResponsavelNome] = useState(usuario.nome || usuario.email || "");
+  const [responsavelRegistro, setResponsavelRegistro] = useState("");
+  const [responsavelCargo, setResponsavelCargo] = useState("");
+  const [atletas, setAtletas] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [conteudo, setConteudo] = useState(null);
+  const [baixando, setBaixando] = useState(false);
+  const folhaRef = useRef(null);
+
+  const config = CONFIG_RELATORIO_MODULO[moduloId];
+
+  useEffect(() => {
+    carregarAtletas().then(setAtletas).catch((e) => setErro(e.message));
+  }, []);
+
+  useEffect(() => { setStatus(""); setConteudo(null); }, [moduloId]);
+
+  async function gerar() {
+    if (!config) return;
+    setCarregando(true); setErro(null);
+    try {
+      const listaAtletas = atletas || await carregarAtletas();
+      if (!atletas) setAtletas(listaAtletas);
+      const registros = await carregarTodosRegistros(config.subcol);
+      const filtros = { tipoPeriodo, dataDia, dataInicio, dataFim, atletaId, categoria, status };
+      setConteudo(config.construir(registros, listaAtletas, filtros));
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function baixar() {
+    if (!folhaRef.current) return;
+    setBaixando(true);
+    try {
+      const sufixoPeriodo = tipoPeriodo === "dia" ? dataDia : `${dataInicio}_a_${dataFim}`;
+      await baixarRelatorioPDF(folhaRef.current, `relatorio_${moduloId}_${sufixoPeriodo}.pdf`);
+    } finally {
+      setBaixando(false);
+    }
+  }
+
+  const periodoLabel = tipoPeriodo === "dia" ? formatarData(dataDia) : `${formatarData(dataInicio)} – ${formatarData(dataFim)}`;
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Central de Relatórios</h1>
+          <div className="crumb">CT Integrado · Meia Noite EC · gera relatórios em PDF por módulo, período e filtros</div>
+        </div>
+      </div>
+
+      {erro && (
+        <div className="access-note" style={{ background: "var(--vermelho-bg)", borderColor: "var(--vermelho)" }}>
+          <span><b>Não consegui carregar os dados:</b> {erro}</span>
+        </div>
+      )}
+
+      {modulosPermitidos.length === 0 ? (
+        <div className="empty-state">Você não tem acesso a nenhum módulo com dados pra relatório.</div>
+      ) : (
+        <React.Fragment>
+          <div className="panel">
+            <div className="panel-head"><h3>Filtros</h3></div>
+            <div className="panel-body" style={{ padding: "16px 20px" }}>
+              <div className="relatorio-filtros-grid">
+                <div className="field">
+                  <label>Módulo</label>
+                  <select value={moduloId} onChange={e => setModuloId(e.target.value)}>
+                    {modulosPermitidos.map((m) => <option key={m} value={m}>{CONFIG_RELATORIO_MODULO[m].label}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Período</label>
+                  <TabSelect opcoes={["Dia", "Intervalo"]} valor={tipoPeriodo === "dia" ? "Dia" : "Intervalo"} onChange={(v) => setTipoPeriodo(v === "Dia" ? "dia" : "intervalo")} tamanho="sm" />
+                </div>
+                {tipoPeriodo === "dia" ? (
+                  <div className="field"><label>Data</label><input type="date" value={dataDia} onChange={e => setDataDia(e.target.value)} /></div>
+                ) : (
+                  <React.Fragment>
+                    <div className="field"><label>De</label><input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} /></div>
+                    <div className="field"><label>Até</label><input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} /></div>
+                  </React.Fragment>
+                )}
+                <div className="field">
+                  <label>Categoria</label>
+                  <select value={categoria} onChange={e => setCategoria(e.target.value)}>
+                    <option value="">Todas</option>
+                    <option value="sub15">Sub-15</option>
+                    <option value="sub17">Sub-17</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Atleta</label>
+                  <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
+                    <option value="">Todos</option>
+                    {(atletas || []).map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}</option>)}
+                  </select>
+                </div>
+                {config && config.statusOpcoes.length > 0 && (
+                  <div className="field">
+                    <label>Desfecho / status</label>
+                    <select value={status} onChange={e => setStatus(e.target.value)}>
+                      <option value="">Todos</option>
+                      {config.statusOpcoes.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="form-grid full" style={{ marginTop: 14 }}>
+                <div className="field"><label>Destinatário</label><input type="text" value={destinatario} onChange={e => setDestinatario(e.target.value)} /></div>
+              </div>
+              <div className="relatorio-filtros-grid" style={{ marginTop: 0 }}>
+                <div className="field"><label>Responsável pelo relatório</label><input type="text" value={responsavelNome} onChange={e => setResponsavelNome(e.target.value)} /></div>
+                <div className="field"><label>Registro profissional</label><input type="text" placeholder="Ex.: CRM-SP 12345" value={responsavelRegistro} onChange={e => setResponsavelRegistro(e.target.value)} /></div>
+                <div className="field"><label>Cargo</label><input type="text" placeholder="Ex.: Médico Responsável" value={responsavelCargo} onChange={e => setResponsavelCargo(e.target.value)} /></div>
+              </div>
+
+              <div className="form-actions" style={{ marginTop: 16 }}>
+                <button className="pill-btn primary" onClick={gerar} disabled={!config || carregando}>{carregando ? "Gerando..." : "Gerar relatório"}</button>
+                {conteudo && <button className="pill-btn" onClick={baixar} disabled={baixando}>{baixando ? "Preparando PDF..." : "Baixar PDF"}</button>}
+              </div>
+            </div>
+          </div>
+
+          {conteudo && config && (
+            <div className="relatorio-preview-wrap" style={{ marginTop: 20 }}>
+              <RelatorioModelo
+                innerRef={folhaRef}
+                titulo={config.titulo}
+                subtitulo={config.subtituloDept}
+                periodoLabel={periodoLabel}
+                destinatario={destinatario}
+                totalLabel={config.totalLabel}
+                totalValor={conteudo.total}
+                resumoTexto={conteudo.resumoTexto}
+                pontosAtencao={conteudo.pontosAtencao}
+                colunasDetalhe={conteudo.colunasDetalhe}
+                linhasDetalhe={conteudo.linhasDetalhe}
+                resumoColorido={conteudo.resumoColorido}
+                grafico={conteudo.grafico}
+                responsavelNome={responsavelNome}
+                responsavelRegistro={responsavelRegistro}
+                responsavelCargo={responsavelCargo}
+              />
+            </div>
+          )}
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
 function AppLogado({ usuario }) {
   const [pagina, setPagina] = useState(temPermissao(usuario, "admin") ? "admin" : (usuario.modulos || [])[0] || "admin");
 
@@ -5228,9 +5997,13 @@ function AppLogado({ usuario }) {
     desempenho: <EmbedExterno url={URL_DASHBOARD_DESEMPENHO} titulo="Dashboard de Desempenho" />,
     treinador: <PainelTreinador />,
     usuarios: <PainelUsuarios usuarioAtual={usuario} />,
+    relatorios: <CentralRelatorios usuario={usuario} />,
   };
 
-  const podeVerPagina = pagina === "elenco" ? true : pagina === "usuarios" ? usuario.role === "admin" : temPermissao(usuario, pagina);
+  const podeVerPagina = pagina === "elenco" ? true
+    : pagina === "usuarios" ? usuario.role === "admin"
+    : pagina === "relatorios" ? temAcessoRelatorios(usuario)
+    : temPermissao(usuario, pagina);
 
   return (
     <div className="app-shell">
