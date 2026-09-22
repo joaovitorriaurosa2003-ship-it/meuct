@@ -146,6 +146,10 @@ input,select,textarea{font-family:inherit;}
 
 /* ---------- Painel de usuários ---------- */
 .modulo-toggle-row{display:flex; flex-wrap:wrap; gap:8px; padding:4px 0;}
+.grupo-acesso-row{display:flex; flex-wrap:wrap; gap:8px; padding:0 0 8px; border-bottom:1px dashed var(--line-soft); margin-bottom:8px;}
+.grupo-btn{padding:5px 12px; border-radius:14px; border:1px solid var(--gold); background:#fff; color:var(--navy); font-size:12px; font-weight:700; cursor:pointer;}
+.grupo-btn:hover{background:var(--gold); color:var(--navy);}
+.grupo-btn:disabled{opacity:.5; cursor:not-allowed;}
 .modulo-toggle{
   padding:6px 12px; border-radius:100px; border:1.5px solid var(--line-soft); background:#fff;
   color:var(--muted); font-size:12px; font-weight:600; cursor:pointer;
@@ -564,6 +568,20 @@ const MODULOS = [
   { id: "social", label: "Serviço Social" },
   { id: "desempenho", label: "Desempenho" },
   { id: "treinador", label: "Treinadores" },
+];
+
+/**
+ * Grupos de acesso rápido — pacotes de módulos pra liberar de uma vez pra um
+ * colaborador, de acordo com a área que ele atua: Campo (comissão técnica,
+ * acesso a todos os dados do atleta), Departamento Médico (fisiologia,
+ * fisioterapia, psicologia e medicina) e Social (psicologia e serviço social).
+ * Aplicar um grupo substitui os módulos liberados do colaborador pelo pacote;
+ * dá pra ajustar módulo a módulo depois, normalmente.
+ */
+const GRUPOS_ACESSO = [
+  { id: "campo", label: "Campo", modulos: ["treinador", "psicologia", "fisioterapia", "fisiologia", "medicina", "social", "desempenho"] },
+  { id: "dm", label: "Departamento Médico", modulos: ["fisiologia", "fisioterapia", "psicologia", "medicina"] },
+  { id: "grupo_social", label: "Social", modulos: ["psicologia", "social"] },
 ];
 
 /** Cria a conta e o documento de permissão (pendente, exceto o e-mail fundador). */
@@ -4958,6 +4976,13 @@ function PainelUsuarios({ usuarioAtual }) {
     setSalvandoId(null);
   }
 
+  async function aplicarGrupo(usr, grupo) {
+    setSalvandoId(usr.id);
+    await db.collection(COL_USUARIOS).doc(usr.id).update({ modulos: grupo.modulos });
+    await carregar();
+    setSalvandoId(null);
+  }
+
   async function alternarRole(usr) {
     const novoRole = usr.role === "admin" ? "colaborador" : "admin";
     setSalvandoId(usr.id);
@@ -4971,7 +4996,7 @@ function PainelUsuarios({ usuarioAtual }) {
       <div className="page-head">
         <div>
           <h1>Usuários</h1>
-          <div className="crumb">CT Integrado · Meia Noite EC · controle de acesso por módulo</div>
+          <div className="crumb">CT Integrado · Meia Noite EC · controle de acesso por módulo — use os botões de grupo (Campo, Departamento Médico, Social) pra liberar o pacote padrão de uma vez, ou ajuste módulo a módulo</div>
         </div>
       </div>
 
@@ -5005,18 +5030,34 @@ function PainelUsuarios({ usuarioAtual }) {
                       {u.role === "admin" ? (
                         <span className="muted">Acesso total (é admin)</span>
                       ) : (
-                        <div className="modulo-toggle-row">
-                          {MODULOS.filter((m) => m.id !== "admin").map((m) => (
-                            <button
-                              key={m.id}
-                              className={"modulo-toggle" + ((u.modulos || []).includes(m.id) ? " on" : "")}
-                              onClick={() => alternarModulo(u, m.id)}
-                              disabled={salvandoId === u.id}
-                            >
-                              {m.label}
-                            </button>
-                          ))}
-                        </div>
+                        <React.Fragment>
+                          <div className="grupo-acesso-row">
+                            {GRUPOS_ACESSO.map((g) => (
+                              <button
+                                key={g.id}
+                                type="button"
+                                className="grupo-btn"
+                                onClick={() => aplicarGrupo(u, g)}
+                                disabled={salvandoId === u.id}
+                                title={"Libera de uma vez: " + g.modulos.map((mid) => (MODULOS.find((m) => m.id === mid) || {}).label).join(", ")}
+                              >
+                                Aplicar {g.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="modulo-toggle-row">
+                            {MODULOS.filter((m) => m.id !== "admin").map((m) => (
+                              <button
+                                key={m.id}
+                                className={"modulo-toggle" + ((u.modulos || []).includes(m.id) ? " on" : "")}
+                                onClick={() => alternarModulo(u, m.id)}
+                                disabled={salvandoId === u.id}
+                              >
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </React.Fragment>
                       )}
                     </td>
                   </tr>
