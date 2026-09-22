@@ -1826,12 +1826,14 @@ function ElencoPorPosicao({ atletasComSinal, onOpenAtleta }) {
 
   function CardJogador(d) {
     const iniciais = d.nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+    const outrasPosicoes = [d.posicao_secundaria, d.posicao_terciaria].filter(Boolean).join(" / ");
     return (
       <div key={d.id} className="jersey-btn" onClick={() => onOpenAtleta(d.id)}>
         <div className={"jersey-sinal " + d.risco}></div>
         <div className="jersey-badge">{iniciais}</div>
         <div className="jersey-nome">{nomeExibicao(d)}</div>
         <div className="jersey-cat">{d.posicao || "Posição não definida"}</div>
+        {outrasPosicoes && <div className="jersey-cat" style={{opacity:0.65, fontSize:"0.85em"}}>Também joga: {outrasPosicoes}</div>}
       </div>
     );
   }
@@ -2055,6 +2057,8 @@ function FormAtleta({ atleta, onSalvar, onCancelar }) {
   const [apelido, setApelido] = useState(atleta ? atleta.apelido || "" : "");
   const [categoria, setCategoria] = useState(atleta ? atleta.categoria || "" : "");
   const [posicao, setPosicao] = useState(atleta ? atleta.posicao || "" : "");
+  const [posicaoSecundaria, setPosicaoSecundaria] = useState(atleta ? atleta.posicao_secundaria || "" : "");
+  const [posicaoTerciaria, setPosicaoTerciaria] = useState(atleta ? atleta.posicao_terciaria || "" : "");
   const [dataNascimento, setDataNascimento] = useState(atleta ? atleta.data_nascimento || "" : "");
   const [localidade, setLocalidade] = useState(atleta ? atleta.localidade || "" : "");
   const [pernaDominante, setPernaDominante] = useState(atleta ? atleta.perna_dominante || "" : "");
@@ -2088,6 +2092,8 @@ function FormAtleta({ atleta, onSalvar, onCancelar }) {
         apelido: apelido.trim(),
         categoria: categoria.trim(),
         posicao: posicao,
+        posicao_secundaria: posicaoSecundaria,
+        posicao_terciaria: posicaoTerciaria,
         data_nascimento: dataNascimento || null,
         localidade: localidade.trim(),
         perna_dominante: pernaDominante,
@@ -2123,8 +2129,24 @@ function FormAtleta({ atleta, onSalvar, onCancelar }) {
       </div>
       <div className="form-grid">
         <div className="field">
-          <label>Posição</label>
+          <label>Posição primária</label>
           <select value={posicao} onChange={(e) => setPosicao(e.target.value)}>
+            <option value="">—</option>
+            {POSICOES.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>Posição secundária (opcional)</label>
+          <select value={posicaoSecundaria} onChange={(e) => setPosicaoSecundaria(e.target.value)}>
+            <option value="">—</option>
+            {POSICOES.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="form-grid">
+        <div className="field">
+          <label>Posição terciária (opcional)</label>
+          <select value={posicaoTerciaria} onChange={(e) => setPosicaoTerciaria(e.target.value)}>
             <option value="">—</option>
             {POSICOES.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
@@ -2667,7 +2689,9 @@ function FichaAtleta({ atleta, onEditar }) {
         {onEditar && <button className="pill-btn" onClick={onEditar}>Editar ficha</button>}
       </div>
       <div className="ficha-grid">
-        <div className="ficha-item"><div className="ficha-label">Posição</div><div className="ficha-valor">{atleta.posicao || "—"}</div></div>
+        <div className="ficha-item"><div className="ficha-label">Posição primária</div><div className="ficha-valor">{atleta.posicao || "—"}</div></div>
+        <div className="ficha-item"><div className="ficha-label">Posição secundária</div><div className="ficha-valor">{atleta.posicao_secundaria || "—"}</div></div>
+        <div className="ficha-item"><div className="ficha-label">Posição terciária</div><div className="ficha-valor">{atleta.posicao_terciaria || "—"}</div></div>
         <div className="ficha-item"><div className="ficha-label">Idade</div><div className="ficha-valor">{idade != null ? idade + " anos" : "—"}</div></div>
         <div className="ficha-item"><div className="ficha-label">Localidade</div><div className="ficha-valor">{atleta.localidade || "—"}</div></div>
         <div className="ficha-item"><div className="ficha-label">Perna dominante</div><div className="ficha-valor">{atleta.perna_dominante || "—"}</div></div>
