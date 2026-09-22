@@ -85,6 +85,12 @@ input,select,textarea{font-family:inherit;}
 .sidebar-tab:hover{color:#fff; background:rgba(255,255,255,0.06);}
 .sidebar-tab.active{color:#fff; background:rgba(184,151,106,0.22); box-shadow:inset 2px 0 0 var(--gold);}
 .sidebar-tab .dot{width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.65; flex-shrink:0;}
+.sidebar-grupo{display:flex; flex-direction:column; gap:3px;}
+.sidebar-grupo-head{justify-content:flex-start;}
+.sidebar-grupo-head .sidebar-grupo-seta{margin-left:auto; opacity:.6; font-size:11px;}
+.sidebar-grupo-head.aberto{color:#fff;}
+.sidebar-grupo-itens{display:flex; flex-direction:column; gap:2px; padding-left:14px; border-left:1px solid rgba(255,255,255,0.12); margin-left:15px;}
+.sidebar-subtab{font-size:12.5px; padding:8px 12px;}
 .sidebar-foot{padding-top:14px; margin-top:10px; border-top:1px solid rgba(255,255,255,0.10);}
 .admin-badge{
   display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:11px;
@@ -580,7 +586,7 @@ const MODULOS = [
  */
 const GRUPOS_ACESSO = [
   { id: "campo", label: "Campo", modulos: ["treinador", "psicologia", "fisioterapia", "fisiologia", "medicina", "social", "desempenho"] },
-  { id: "dm", label: "Departamento Médico", modulos: ["fisiologia", "fisioterapia", "psicologia", "medicina"] },
+  { id: "dm", label: "Departamento Médico", modulos: ["fisioterapia", "fisiologia", "medicina", "psicologia"] },
   { id: "grupo_social", label: "Social", modulos: ["psicologia", "social"] },
 ];
 
@@ -966,19 +972,45 @@ const HUBS = [
 
 function HubBar({ current, onNavigate, usuario, onSair }) {
   const [menuAberto, setMenuAberto] = useState(false);
+  const [filtroAberto, setFiltroAberto] = useState(null);
   const iniciais = (usuario.nome || usuario.email || "?").trim().split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const hubsVisiveis = HUBS.filter((h) => temPermissao(usuario, h.id));
+  const porId = {};
+  HUBS.forEach((h) => { porId[h.id] = h; });
+
+  /** Áreas (Campo / DM / Social) agrupam os módulos clínicos como filtro no menu:
+   *  em vez de listar tudo solto, cada área vira um botão que expande só os
+   *  módulos daquela área que a pessoa tem permissão de ver. */
+  const gruposMenu = GRUPOS_ACESSO
+    .map((g) => ({
+      ...g,
+      itens: g.modulos.map((mid) => porId[mid]).filter((h) => h && temPermissao(usuario, h.id)),
+    }))
+    .filter((g) => g.itens.length > 0);
+
+  const idsAgrupados = new Set(GRUPOS_ACESSO.flatMap((g) => g.modulos));
+  const itensSoltos = hubsVisiveis.filter((h) => !idsAgrupados.has(h.id));
 
   const itensNav = [
     { id: "elenco", label: "Elenco" },
-    ...hubsVisiveis.map((h) => ({ id: h.id, label: h.label })),
+    ...itensSoltos.map((h) => ({ id: h.id, label: h.label })),
+    ...gruposMenu.flatMap((g) => g.itens),
     ...(usuario.role === "admin" ? [{ id: "usuarios", label: "Usuários" }] : []),
   ];
   const itemAtual = itensNav.find((it) => it.id === current);
 
+  useEffect(() => {
+    const grupoDoAtual = gruposMenu.find((g) => g.itens.some((it) => it.id === current));
+    if (grupoDoAtual) setFiltroAberto(grupoDoAtual.id);
+  }, [current]);
+
   function navegar(id) {
     onNavigate(id);
     setMenuAberto(false);
+  }
+
+  function alternarFiltro(id) {
+    setFiltroAberto((prev) => (prev === id ? null : id));
   }
 
   return (
@@ -997,7 +1029,15 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
       </button>
 
       <div className={"sidebar-nav" + (menuAberto ? " mobile-open" : "")}>
-        {itensNav.map((it) => (
+        <button
+          type="button"
+          onClick={() => navegar("elenco")}
+          className={"sidebar-tab" + (current === "elenco" ? " active" : "")}
+        >
+          <span className="dot"></span>
+          Elenco
+        </button>
+        {itensSoltos.map((it) => (
           <button
             key={it.id}
             type="button"
@@ -1008,6 +1048,46 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
             {it.label}
           </button>
         ))}
+
+        {gruposMenu.map((g) => (
+          <div className="sidebar-grupo" key={g.id}>
+            <button
+              type="button"
+              onClick={() => alternarFiltro(g.id)}
+              className={"sidebar-tab sidebar-grupo-head" + (filtroAberto === g.id ? " aberto" : "")}
+            >
+              <span className="dot"></span>
+              {g.label}
+              <span className="sidebar-grupo-seta">{filtroAberto === g.id ? "▾" : "▸"}</span>
+            </button>
+            {filtroAberto === g.id && (
+              <div className="sidebar-grupo-itens">
+                {g.itens.map((it) => (
+                  <button
+                    key={it.id}
+                    type="button"
+                    onClick={() => navegar(it.id)}
+                    className={"sidebar-tab sidebar-subtab" + (current === it.id ? " active" : "")}
+                  >
+                    <span className="dot"></span>
+                    {it.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {usuario.role === "admin" && (
+          <button
+            type="button"
+            onClick={() => navegar("usuarios")}
+            className={"sidebar-tab" + (current === "usuarios" ? " active" : "")}
+          >
+            <span className="dot"></span>
+            Usuários
+          </button>
+        )}
       </div>
 
       {menuAberto && <div className="menu-backdrop-mobile" onClick={() => setMenuAberto(false)}></div>}
