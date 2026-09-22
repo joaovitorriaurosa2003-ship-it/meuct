@@ -738,9 +738,15 @@ function hojeISO() {
   return d.getFullYear() + "-" + mm + "-" + dd;
 }
 
+/** Nome pra exibir: usa o apelido quando cadastrado, senão o nome completo. */
+function nomeExibicao(atleta) {
+  if (!atleta) return "—";
+  return atleta.apelido && atleta.apelido.trim() ? atleta.apelido.trim() : atleta.nome;
+}
+
 function nomeAtleta(atletas, id) {
   const a = (atletas || []).find((x) => x.id === id);
-  return a ? a.nome : "—";
+  return nomeExibicao(a);
 }
 
 /* ---------- Fisioterapia: lesões estruturadas, fases de RTP, reincidência ---------- */
@@ -1566,7 +1572,7 @@ function DadosPorConstruto({ dados }) {
         }
       });
       if (Object.keys(porFonte).length === 0) return null;
-      return { atleta: a.nome, porFonte };
+      return { atleta: nomeExibicao(a), porFonte };
     })
     .filter(Boolean);
 
@@ -1617,7 +1623,7 @@ function DadosPorEstatistica({ dados }) {
       if (!regs.length) return null;
       const campos = parseNota(regs[0].nota).campos;
       const valor = campos[stat];
-      return typeof valor === "number" ? { atleta: a.nome, valor } : null;
+      return typeof valor === "number" ? { atleta: nomeExibicao(a), valor } : null;
     })
     .filter(Boolean)
     .sort((a, b) => b.valor - a.valor);
@@ -1729,7 +1735,7 @@ function CruzamentoDados({ dados }) {
       if (typeof x !== "number" || typeof y !== "number") return null;
       const fonteX = eixoX.area === "Psicologia" ? (valorConstrutoAtleta(dados, a.id, eixoX.construto) || {}).instrumento : null;
       const fonteY = eixoY.area === "Psicologia" ? (valorConstrutoAtleta(dados, a.id, eixoY.construto) || {}).instrumento : null;
-      return { x, y, nome: a.nome, fonteX, fonteY };
+      return { x, y, nome: nomeExibicao(a), fonteX, fonteY };
     })
     .filter(Boolean);
 
@@ -1824,7 +1830,7 @@ function ElencoPorPosicao({ atletasComSinal, onOpenAtleta }) {
       <div key={d.id} className="jersey-btn" onClick={() => onOpenAtleta(d.id)}>
         <div className={"jersey-sinal " + d.risco}></div>
         <div className="jersey-badge">{iniciais}</div>
-        <div className="jersey-nome">{d.nome}</div>
+        <div className="jersey-nome">{nomeExibicao(d)}</div>
         <div className="jersey-cat">{d.posicao || "Posição não definida"}</div>
       </div>
     );
@@ -2046,6 +2052,7 @@ const POSICOES = ["Goleiro", "Lateral-direito", "Lateral-esquerdo", "Zagueiro", 
 function FormAtleta({ atleta, onSalvar, onCancelar }) {
   const { useState } = React;
   const [nome, setNome] = useState(atleta ? atleta.nome : "");
+  const [apelido, setApelido] = useState(atleta ? atleta.apelido || "" : "");
   const [categoria, setCategoria] = useState(atleta ? atleta.categoria || "" : "");
   const [posicao, setPosicao] = useState(atleta ? atleta.posicao || "" : "");
   const [dataNascimento, setDataNascimento] = useState(atleta ? atleta.data_nascimento || "" : "");
@@ -2078,6 +2085,7 @@ function FormAtleta({ atleta, onSalvar, onCancelar }) {
     try {
       await onSalvar({
         nome: nome.trim(),
+        apelido: apelido.trim(),
         categoria: categoria.trim(),
         posicao: posicao,
         data_nascimento: dataNascimento || null,
@@ -2102,6 +2110,9 @@ function FormAtleta({ atleta, onSalvar, onCancelar }) {
     <div className="form-panel">
       <div className="form-grid">
         <div className="field"><label>Nome completo</label><input type="text" value={nome} onChange={(e) => setNome(e.target.value)} /></div>
+        <div className="field"><label>Apelido (opcional)</label><input type="text" placeholder="Como o atleta é chamado no dia a dia" value={apelido} onChange={(e) => setApelido(e.target.value)} /></div>
+      </div>
+      <div className="form-grid">
         <div className="field"><label>Categoria</label>
           <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
             <option value="">—</option>
@@ -2223,14 +2234,14 @@ function MesclarAtletas({ atletas, onMesclado }) {
           <label>Atleta 1</label>
           <select value={idA} onChange={(e) => { setIdA(e.target.value); setCanonico(""); }}>
             <option value="">Selecione...</option>
-            {atletas.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+            {atletas.map((a) => <option key={a.id} value={a.id}>{nomeExibicao(a)}</option>)}
           </select>
         </div>
         <div className="field">
           <label>Atleta 2</label>
           <select value={idB} onChange={(e) => { setIdB(e.target.value); setCanonico(""); }}>
             <option value="">Selecione...</option>
-            {atletas.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+            {atletas.map((a) => <option key={a.id} value={a.id}>{nomeExibicao(a)}</option>)}
           </select>
         </div>
       </div>
@@ -2268,7 +2279,7 @@ function ConfirmarExclusao({ atleta, dados, onCancelar, onExcluido }) {
     <div className="form-panel">
       <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)"}}>
         <span>
-          <b>Excluir {atleta.nome}?</b> Isso apaga o cadastro e {totalRegistros > 0 ? <b>todos os {totalRegistros} registro(s)</b> : "nenhum registro (não tem dado lançado ainda)"} dele em todas as áreas. Não tem como desfazer.
+          <b>Excluir {nomeExibicao(atleta)}{atleta.apelido ? ` (${atleta.nome})` : ""}?</b> Isso apaga o cadastro e {totalRegistros > 0 ? <b>todos os {totalRegistros} registro(s)</b> : "nenhum registro (não tem dado lançado ainda)"} dele em todas as áreas. Não tem como desfazer.
         </span>
       </div>
       <div className="form-actions">
@@ -2317,7 +2328,7 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
 
         {!podeGerenciar && (
           <div className="access-note" style={{margin:"14px 20px 0"}}>
-            <span>Seu perfil pode navegar o elenco, mas só Admin, Treinador, Psicologia e Serviço Social podem criar, editar, mesclar ou excluir atletas.</span>
+            <span>Seu perfil pode navegar o elenco, mas só Admin, Treinador, Psicologia, Medicina e Serviço Social podem criar, editar, mesclar ou excluir atletas.</span>
           </div>
         )}
 
@@ -2340,7 +2351,7 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
             <tbody>
               {linha.map(d => (
                 <tr key={d.id} className="clickable">
-                  <td style={{fontWeight:600, color:"var(--navy)"}} onClick={() => onOpenAtleta(d.id)}>{d.nome}{d.pendente_vinculo ? " ⚠︎ pendente de vínculo" : ""}</td>
+                  <td style={{fontWeight:600, color:"var(--navy)"}} onClick={() => onOpenAtleta(d.id)}>{nomeExibicao(d)}{d.pendente_vinculo ? " ⚠︎ pendente de vínculo" : ""}</td>
                   <td onClick={() => onOpenAtleta(d.id)}>{d.categoria || "—"}</td>
                   <td className="muted" onClick={() => onOpenAtleta(d.id)}>{d.origem || "—"}</td>
                   <td onClick={() => onOpenAtleta(d.id)}><span className={"badge " + d.risco}>{d.risco === "verde" ? "Regular" : d.risco === "amarelo" ? "Atenção" : "Prioridade"}</span></td>
@@ -2812,7 +2823,8 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
       <div className="profile-head">
         <div className="profile-avatar">{iniciais}</div>
         <div>
-          <div className="profile-name">{atleta.nome}</div>
+          <div className="profile-name">{nomeExibicao(atleta)}</div>
+          {atleta.apelido && <div className="profile-meta" style={{marginTop:-2, marginBottom:4}}>{atleta.nome}</div>}
           <div className="profile-meta">{atleta.categoria || "Categoria não definida"} · <span className={"badge " + risco} style={{marginLeft:4}}>{risco === "verde" ? "Regular" : risco === "amarelo" ? "Atenção" : "Prioridade"}</span></div>
         </div>
         <button className="pill-btn" style={{marginLeft:"auto"}} onClick={() => window.print()}>Gerar relatório PDF</button>
@@ -2927,7 +2939,7 @@ function FormNovoRegistro({ atletas, tiposSugeridos, chave, onSalvar, onCancelar
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -2992,7 +3004,7 @@ function FormNovoRegistroSocial({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3074,7 +3086,7 @@ function FormLesao({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3226,7 +3238,7 @@ function FormPsicologiaEstruturada({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3305,7 +3317,7 @@ function FormMedicinaPPE({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3384,7 +3396,7 @@ function FormMedicinaAfastamento({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3459,7 +3471,7 @@ function FormMedicinaConcussao({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3548,7 +3560,7 @@ function FormMedicinaTue({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3603,7 +3615,7 @@ function FormMedicinaCrescimento({ atletas, onSalvar, onCancelar }) {
         <div className="field">
           <label>Atleta</label>
           <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-            {atletas.map(a => <option key={a.id} value={a.id}>{a.nome}{a.categoria ? " — " + a.categoria : ""}</option>)}
+            {atletas.map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}{a.categoria ? " — " + a.categoria : ""}</option>)}
           </select>
         </div>
         <div className="field">
@@ -3859,7 +3871,7 @@ function PainelTreinador() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>{atleta ? atleta.nome : "Painel da Comissão Técnica"}</h1>
+          <h1>{atleta ? nomeExibicao(atleta) : "Painel da Comissão Técnica"}</h1>
           <div className="crumb">CT Integrado · Meia Noite EC · visão de semáforo, sem dado clínico</div>
         </div>
       </div>
@@ -4021,7 +4033,7 @@ function ViewPsicologia() {
                       {comLesaoProlongada.flatMap(({ atleta, episodios }) =>
                         episodios.map((ep, i) => (
                           <tr key={atleta.id + ep.regiao + i}>
-                            <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                            <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                             <td>{ep.regiao}</td>
                             <td><span className="badge amarelo">{labelFaseRtp(ep.faseAtual)}</span></td>
                             <td>{calcularDiasEntre(ep.dataInicio)}</td>
@@ -4043,7 +4055,7 @@ function ViewPsicologia() {
                     <tbody>
                       {semReavaliacao.map(({ atleta, dias }) => (
                         <tr key={atleta.id}>
-                          <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                          <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                           <td>{(registros[atleta.id] || [])[0] ? formatarData(registros[atleta.id][0].data) : "Nunca avaliado"}</td>
                           <td><span className="badge amarelo">{dias === null ? "—" : dias + " dias"}</span></td>
                         </tr>
@@ -4198,7 +4210,7 @@ function ViewFisioterapia() {
                       {episodiosPorAtleta.flatMap(({ atleta, episodios }) =>
                         episodios.map((ep, i) => (
                           <tr key={atleta.id + ep.regiao + i}>
-                            <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                            <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                             <td>{ep.regiao}</td>
                             <td><span className={"badge " + (ep.faseAtual === "liberado" ? "verde" : ep.faseAtual === "repouso" ? "vermelho" : "amarelo")}>{labelFaseRtp(ep.faseAtual)}</span></td>
                             <td>{calcularDiasEntre(ep.dataInicio)}</td>
@@ -4456,7 +4468,7 @@ function ViewMedicina() {
                     <tbody>
                       {concussoesAtivas.map(({ atleta, episodio }) => (
                         <tr key={atleta.id}>
-                          <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                          <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                           <td><span className="badge vermelho">{labelFaseConcussao(episodio.faseAtual)}</span></td>
                           <td>{calcularDiasEntre(episodio.dataInicio)}</td>
                           <td><AvancarFaseConcussao atletaId={atleta.id} episodio={episodio} onSalvar={adicionar} /></td>
@@ -4477,7 +4489,7 @@ function ViewMedicina() {
                     <tbody>
                       {ppeVencidosOuVencendo.map(({ atleta, status, dias, registro }) => (
                         <tr key={atleta.id}>
-                          <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                          <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                           <td><span className={"badge " + (status === "vencido" ? "vermelho" : "amarelo")}>{status === "vencido" ? `Vencido há ${-dias} dias` : `Vence em ${dias} dias`}</span></td>
                           <td>{registro ? formatarData(registro.validade) : "—"}</td>
                         </tr>
@@ -4498,7 +4510,7 @@ function ViewMedicina() {
                       {afastamentosAtivos.flatMap(({ atleta, registros: regs }) =>
                         regs.map((r, i) => (
                           <tr key={atleta.id + i}>
-                            <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                            <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                             <td>{r.motivo}</td>
                             <td>{formatarData(r.data)}</td>
                             <td>{calcularDiasEntre(r.data)}</td>
@@ -4522,7 +4534,7 @@ function ViewMedicina() {
                       {tuesAtivas.flatMap(({ atleta, tues }) =>
                         tues.map((r, i) => (
                           <tr key={atleta.id + i}>
-                            <td style={{fontWeight:600, color:"var(--navy)"}}>{atleta.nome}</td>
+                            <td style={{fontWeight:600, color:"var(--navy)"}}>{nomeExibicao(atleta)}</td>
                             <td>{r.medicamento}</td>
                             <td>{r.condicao}</td>
                             <td>{r.validade ? formatarData(r.validade) : "Sem prazo definido"}</td>
