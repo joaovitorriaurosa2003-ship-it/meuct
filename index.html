@@ -5381,6 +5381,69 @@ function dataNoPeriodo(dataIso, filtros) {
   return dataIso >= filtros.dataInicio && dataIso <= filtros.dataFim;
 }
 
+/** Config Chart.js pronta pra um gráfico simples de barra/doughnut (1 série), no padrão visual do relatório. */
+function chartConfigSimples(tipo, labels, dados, cores) {
+  return {
+    type: tipo,
+    data: { labels, datasets: [{ data: dados, backgroundColor: cores, borderColor: "#0A1F35", borderWidth: 1 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: tipo === "doughnut", position: "bottom", labels: { font: { size: 11 }, boxWidth: 12 } },
+      },
+      scales: tipo === "doughnut" ? undefined : {
+        y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
+        x: { ticks: { font: { size: 10.5 } } },
+      },
+    },
+  };
+}
+
+/** Um gráfico de evolução (linha, uma série por instrumento) por construto de psicologia que o atleta realmente tem — mesma lógica de EvolucaoPsiAtleta, reaproveitada aqui pra vir tudo embutido no PDF. */
+function construirGraficosPsicologiaAtleta(registros, atletaId) {
+  const dadosWrap = { psiData: registros };
+  const construtos = Object.keys(CONSTRUCTOS_PSI).filter((c) => Object.keys(historicoConstrutoAtleta(dadosWrap, atletaId, c)).length > 0);
+  return construtos.map((construto) => {
+    const porInstrumento = historicoConstrutoAtleta(dadosWrap, atletaId, construto);
+    const instrumentos = Object.keys(porInstrumento);
+    const datasUnicas = Array.from(new Set(instrumentos.flatMap((t) => porInstrumento[t].map((p) => p.data)))).sort();
+    return {
+      titulo: construto,
+      chartConfig: {
+        type: "line",
+        data: {
+          labels: datasUnicas.map(formatarData),
+          datasets: instrumentos.map((tipo, i) => {
+            const mapa = {};
+            porInstrumento[tipo].forEach((p) => { mapa[p.data] = p.valor; });
+            return {
+              label: tipo,
+              data: datasUnicas.map((d) => (d in mapa ? mapa[d] : null)),
+              borderColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length],
+              backgroundColor: PALETA_SUBESCALAS[i % PALETA_SUBESCALAS.length] + "33",
+              tension: 0.25,
+              pointRadius: 4,
+              spanGaps: true,
+            };
+          }),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: { legend: { labels: { font: { size: 10.5 } } } },
+          scales: {
+            x: { ticks: { font: { size: 10.5 } } },
+            y: { ticks: { font: { size: 10.5 } } },
+          },
+        },
+      },
+    };
+  });
+}
+
 /** Relatório de Medicina — usa só os registros do tipo "Atendimento" (consultas de ambulatório), no molde do relatório diário de referência. */
 function construirRelatorioMedicina(registros, atletas, filtros) {
   const linhas = [];
@@ -5428,15 +5491,12 @@ function construirRelatorioMedicina(registros, atletas, filtros) {
     texto: registro.conduta || labelDesfechoAtendimento(registro.desfecho),
   }));
 
-  const grafico = total > 0 ? {
+  const graficos = total > 0 ? [{
     titulo: "Atendimentos por desfecho",
-    tipo: "bar",
-    labels: ["Liberado", "Restrição/orientação", "Afastado"],
-    dados: [porDesfecho.liberado, porDesfecho.restricao, porDesfecho.afastado],
-    cores: ["#4C8B63", "#B5883A", "#A6473C"],
-  } : null;
+    chartConfig: chartConfigSimples("bar", ["Liberado", "Restrição/orientação", "Afastado"], [porDesfecho.liberado, porDesfecho.restricao, porDesfecho.afastado], ["#4C8B63", "#B5883A", "#A6473C"]),
+  }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
 }
 
 /** Relatório de Fisioterapia — agrupa por episódio de lesão (mesmo agrupamento do painel), restrito aos episódios com alguma movimentação no período. */
@@ -5491,15 +5551,12 @@ function construirRelatorioFisioterapia(registros, atletas, filtros) {
 
   const porRegiao = {};
   linhas.forEach(({ episodio }) => { porRegiao[episodio.regiao] = (porRegiao[episodio.regiao] || 0) + 1; });
-  const grafico = total > 0 ? {
+  const graficos = total > 0 ? [{
     titulo: "Episódios por região",
-    tipo: "bar",
-    labels: Object.keys(porRegiao),
-    dados: Object.values(porRegiao),
-    cores: "#B8976A",
-  } : null;
+    chartConfig: chartConfigSimples("bar", Object.keys(porRegiao), Object.values(porRegiao), "#B8976A"),
+  }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
 }
 
 /** Relatório genérico (Fisiologia, Psicologia, Desempenho) — registros simples com campo "sinal" (verde/amarelo/vermelho). */
@@ -5548,15 +5605,12 @@ function construirRelatorioGenerico(registros, atletas, filtros, opts) {
     texto: registro.tipo || "—",
   }));
 
-  const grafico = total > 0 ? {
+  const graficos = total > 0 ? [{
     titulo: "Distribuição por sinal",
-    tipo: "doughnut",
-    labels: ["Regular", "Atenção", "Prioridade"],
-    dados: [porSinal.verde, porSinal.amarelo, porSinal.vermelho],
-    cores: ["#4C8B63", "#B5883A", "#A6473C"],
-  } : null;
+    chartConfig: chartConfigSimples("doughnut", ["Regular", "Atenção", "Prioridade"], [porSinal.verde, porSinal.amarelo, porSinal.vermelho], ["#4C8B63", "#B5883A", "#A6473C"]),
+  }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
 }
 
 /** Relatório de Serviço Social — usa o campo statusPublico ("ativo"/"atencao") em vez de "sinal". */
@@ -5604,15 +5658,22 @@ function construirRelatorioSocial(registros, atletas, filtros) {
     texto: registro.tipo || "—",
   }));
 
-  const grafico = total > 0 ? {
+  const graficos = total > 0 ? [{
     titulo: "Acompanhamentos por status",
-    tipo: "doughnut",
-    labels: ["Ativo", "Em atenção"],
-    dados: [total - emAtencao, emAtencao],
-    cores: ["#4C8B63", "#B5883A"],
-  } : null;
+    chartConfig: chartConfigSimples("doughnut", ["Ativo", "Em atenção"], [total - emAtencao, emAtencao], ["#4C8B63", "#B5883A"]),
+  }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
+}
+
+/** Relatório de Psicologia — quando filtrado por UM atleta específico, troca o gráfico genérico por um gráfico de evolução por construto (linha, uma série por instrumento) pra cada construto que esse atleta tem dado — a mesma visão de EvolucaoPsiAtleta, só que todas de uma vez, encaixadas no PDF. */
+function construirRelatorioPsicologia(registros, atletas, filtros) {
+  const base = construirRelatorioGenerico(registros, atletas, filtros, { itemSingular: "avaliação", itemPlural: "avaliações" });
+  if (filtros.atletaId) {
+    const graficosAtleta = construirGraficosPsicologiaAtleta(registros, filtros.atletaId);
+    if (graficosAtleta.length > 0) return { ...base, graficos: graficosAtleta };
+  }
+  return base;
 }
 
 /** Configuração de cada módulo disponível na Central de Relatórios: rótulos, subcoleção de origem e função que monta o conteúdo. */
@@ -5651,7 +5712,7 @@ const CONFIG_RELATORIO_MODULO = {
     subtituloDept: "Psicologia — Comunicação à Coordenação",
     totalLabel: "Total de avaliações",
     statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
-    construir: (regs, atletas, filtros) => construirRelatorioGenerico(regs, atletas, filtros, { itemSingular: "avaliação", itemPlural: "avaliações" }),
+    construir: construirRelatorioPsicologia,
   },
   social: {
     label: "Serviço Social",
@@ -5682,25 +5743,7 @@ function MiniChartRelatorio({ grafico }) {
   useEffect(() => {
     if (!canvasRef.current || !grafico) return;
     if (chartRef.current) chartRef.current.destroy();
-    chartRef.current = new Chart(canvasRef.current, {
-      type: grafico.tipo || "bar",
-      data: {
-        labels: grafico.labels,
-        datasets: [{ data: grafico.dados, backgroundColor: grafico.cores, borderColor: "#0A1F35", borderWidth: 1 }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        plugins: {
-          legend: { display: grafico.tipo === "doughnut", position: "bottom", labels: { font: { size: 11 }, boxWidth: 12 } },
-        },
-        scales: grafico.tipo === "doughnut" ? undefined : {
-          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10.5 } } },
-          x: { ticks: { font: { size: 10.5 } } },
-        },
-      },
-    });
+    chartRef.current = new Chart(canvasRef.current, grafico.chartConfig);
     return () => { if (chartRef.current) chartRef.current.destroy(); };
   }, [JSON.stringify(grafico)]);
 
@@ -5709,7 +5752,7 @@ function MiniChartRelatorio({ grafico }) {
 }
 
 /** Folha do relatório — layout fixo (cabeçalho com escudo, tabela de info, pontos de atenção, gráfico, tabela detalhada, resumo colorido, assinatura), igual pro PDF quanto pra tela. */
-function RelatorioModelo({ innerRef, titulo, subtitulo, periodoLabel, destinatario, totalLabel, totalValor, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, grafico, responsavelNome, responsavelRegistro, responsavelCargo }) {
+function RelatorioModelo({ innerRef, titulo, subtitulo, periodoLabel, destinatario, totalLabel, totalValor, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos, responsavelNome, responsavelRegistro, responsavelCargo }) {
   return (
     <div className="relatorio-folha" ref={innerRef}>
       <div className="relatorio-cabecalho">
@@ -5746,12 +5789,12 @@ function RelatorioModelo({ innerRef, titulo, subtitulo, periodoLabel, destinatar
         </React.Fragment>
       )}
 
-      {grafico && (
-        <React.Fragment>
-          <div className="relatorio-secao-titulo">{grafico.titulo}</div>
-          <MiniChartRelatorio grafico={grafico} />
+      {(graficos || []).map((g, i) => (
+        <React.Fragment key={i}>
+          <div className="relatorio-secao-titulo">{g.titulo}</div>
+          <MiniChartRelatorio grafico={g} />
         </React.Fragment>
-      )}
+      ))}
 
       <div className="relatorio-secao-titulo">Detalhamento</div>
       <table className="relatorio-tabela">
@@ -5970,7 +6013,7 @@ function CentralRelatorios({ usuario }) {
                 colunasDetalhe={conteudo.colunasDetalhe}
                 linhasDetalhe={conteudo.linhasDetalhe}
                 resumoColorido={conteudo.resumoColorido}
-                grafico={conteudo.grafico}
+                graficos={conteudo.graficos}
                 responsavelNome={responsavelNome}
                 responsavelRegistro={responsavelRegistro}
                 responsavelCargo={responsavelCargo}
