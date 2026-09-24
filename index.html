@@ -23,6 +23,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
   --navy: #0A1F35;
@@ -5836,33 +5837,79 @@ function RelatorioModelo({ innerRef, titulo, subtitulo, periodoLabel, destinatar
   );
 }
 
-/** Renderiza o elemento em canvas (html2canvas) e monta um PDF A4 paginado (jsPDF), disparando o download direto. */
-async function baixarRelatorioPDF(elemento, nomeArquivo) {
+/** Captura um elemento (a folha de relatório) via html2canvas e adiciona suas páginas a um doc jsPDF já existente.
+ *  Use primeiraPagina=true quando for o primeiríssimo conteúdo do doc (reaproveita a página em branco inicial);
+ *  caso contrário abre uma nova página antes de desenhar — é o que permite empilhar vários atletas num único PDF. */
+async function adicionarElementoAoPDF(pdfDoc, elemento, primeiraPagina) {
   const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
   const imgData = canvas.toDataURL("image/png");
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
+  const pageWidth = pdfDoc.internal.pageSize.getWidth();
+  const pageHeight = pdfDoc.internal.pageSize.getHeight();
   const imgWidth = pageWidth;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
   let heightLeft = imgHeight;
   let position = 0;
-  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  if (!primeiraPagina) pdfDoc.addPage();
+  pdfDoc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
   heightLeft -= pageHeight;
   while (heightLeft > 0) {
     position -= pageHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    pdfDoc.addPage();
+    pdfDoc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
     heightLeft -= pageHeight;
   }
+}
+
+/** Renderiza o elemento em canvas (html2canvas) e monta um PDF A4 paginado (jsPDF), disparando o download direto. */
+async function baixarRelatorioPDF(elemento, nomeArquivo) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  await adicionarElementoAoPDF(pdf, elemento, true);
   pdf.save(nomeArquivo);
+}
+
+/** Deixa um texto seguro pra usar em nome de arquivo: sem acento, sem espaço/caractere especial. */
+function fatiaArquivo(txt) {
+  const limpo = (txt || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return limpo || "Relatorio";
+}
+
+/** Converte "YYYY-MM-DD" pra "DD-MM-AAAA" (padrão usado no nome do arquivo). */
+function dataArquivo(dataIso) {
+  const [y, m, d] = (dataIso || hojeISO()).split("-");
+  return `${d}-${m}-${y}`;
+}
+
+/** Nome do arquivo do relatório: sempre Setor_Atleta(ouGrupo)_Data. */
+function nomeArquivoRelatorio(setorLabel, sujeito) {
+  return `${fatiaArquivo(setorLabel)}_${fatiaArquivo(sujeito)}_${dataArquivo(hojeISO())}.pdf`;
+}
+
+/** Dispara o download de um Blob já pronto (usado pro .zip de PDFs em lote). */
+function baixarBlob(blob, nomeArquivo) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/** Atletas (dentre os candidatos) que têm pelo menos 1 registro dentro do período escolhido no relatório. */
+function atletasComDadosNoPeriodo(registros, atletasCandidatos, filtros) {
+  return atletasCandidatos.filter((a) => (registros[a.id] || []).some((r) => dataNoPeriodo(r.data, filtros)));
 }
 
 function CentralRelatorios({ usuario }) {
   const { useState, useEffect, useRef } = React;
   const modulosPermitidos = MODULOS_RELATORIO.filter((m) => temPermissao(usuario, m));
   const [moduloId, setModuloId] = useState(modulosPermitidos[0] || "");
+  const [modo, setModo] = useState("individual"); // "individual" | "grupo"
   const [tipoPeriodo, setTipoPeriodo] = useState("dia");
   const [dataDia, setDataDia] = useState(hojeISO());
   const [dataInicio, setDataInicio] = useState(hojeISO());
@@ -5881,13 +5928,24 @@ function CentralRelatorios({ usuario }) {
   const [baixando, setBaixando] = useState(false);
   const folhaRef = useRef(null);
 
+  // ---- Modo grupo ----
+  const [grupoIds, setGrupoIds] = useState([]); // ids dos atletas marcados pro grupo
+  const [gerandoGrupo, setGerandoGrupo] = useState(null); // null | "zip" | "combinado"
+  const [progressoGrupo, setProgressoGrupo] = useState(null); // { atual, total, nome }
+  const [conteudoGrupoAtual, setConteudoGrupoAtual] = useState(null); // { atletaId, conteudo } — sendo capturado agora
+  const folhaGrupoRef = useRef(null);
+
   const config = CONFIG_RELATORIO_MODULO[moduloId];
 
   useEffect(() => {
     carregarAtletas().then(setAtletas).catch((e) => setErro(e.message));
   }, []);
 
-  useEffect(() => { setStatus(""); setConteudo(null); }, [moduloId]);
+  useEffect(() => { setStatus(""); setConteudo(null); setGrupoIds([]); }, [moduloId]);
+
+  const candidatosGrupo = (atletas || []).filter(
+    (a) => !categoria || normalizarCategoria(a.categoria) === categoria
+  );
 
   async function gerar() {
     if (!config) return;
@@ -5909,10 +5967,85 @@ function CentralRelatorios({ usuario }) {
     if (!folhaRef.current) return;
     setBaixando(true);
     try {
-      const sufixoPeriodo = tipoPeriodo === "dia" ? dataDia : `${dataInicio}_a_${dataFim}`;
-      await baixarRelatorioPDF(folhaRef.current, `relatorio_${moduloId}_${sufixoPeriodo}.pdf`);
+      const sujeito = atletaId ? nomeAtleta(atletas, atletaId) : (categoria ? categoria : "Todos");
+      await baixarRelatorioPDF(folhaRef.current, nomeArquivoRelatorio(config.label, sujeito));
     } finally {
       setBaixando(false);
+    }
+  }
+
+  function toggleGrupoId(id) {
+    setGrupoIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function marcarComDadosNoPeriodo() {
+    if (!config) return;
+    setCarregando(true); setErro(null);
+    try {
+      const listaAtletas = atletas || await carregarAtletas();
+      if (!atletas) setAtletas(listaAtletas);
+      const registros = await carregarTodosRegistros(config.subcol);
+      const filtros = { tipoPeriodo, dataDia, dataInicio, dataFim };
+      const candidatos = listaAtletas.filter((a) => !categoria || normalizarCategoria(a.categoria) === categoria);
+      const comDados = atletasComDadosNoPeriodo(registros, candidatos, filtros);
+      setGrupoIds(comDados.map((a) => a.id));
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  /** Gera os relatórios de todos os atletas do grupo, um de cada vez (renderizados fora da tela),
+   *  e junta o resultado num .zip (um PDF por atleta) ou num único PDF combinado. */
+  async function processarGrupo(saida) {
+    if (!config || grupoIds.length === 0) return;
+    setGerandoGrupo(saida); setErro(null);
+    try {
+      const listaAtletas = atletas || await carregarAtletas();
+      if (!atletas) setAtletas(listaAtletas);
+      const registros = await carregarTodosRegistros(config.subcol);
+      const filtrosBase = { tipoPeriodo, dataDia, dataInicio, dataFim, categoria, status };
+      const { jsPDF } = window.jspdf;
+      const zip = saida === "zip" ? new JSZip() : null;
+      const pdfCombinado = saida === "combinado" ? new jsPDF({ unit: "mm", format: "a4" }) : null;
+
+      for (let i = 0; i < grupoIds.length; i++) {
+        const idAtual = grupoIds[i];
+        const nomeAtual = nomeAtleta(listaAtletas, idAtual);
+        setProgressoGrupo({ atual: i + 1, total: grupoIds.length, nome: nomeAtual });
+
+        const filtros = { ...filtrosBase, atletaId: idAtual };
+        const conteudoAtleta = config.construir(registros, listaAtletas, filtros);
+        setConteudoGrupoAtual({ atletaId: idAtual, conteudo: conteudoAtleta });
+
+        // espera o React montar a folha oculta e o Chart.js desenhar os gráficos nela antes de capturar
+        await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 250))));
+        if (!folhaGrupoRef.current) continue;
+
+        const nomeArq = nomeArquivoRelatorio(config.label, nomeAtual);
+        if (saida === "zip") {
+          const pdfIndividual = new jsPDF({ unit: "mm", format: "a4" });
+          await adicionarElementoAoPDF(pdfIndividual, folhaGrupoRef.current, true);
+          zip.file(nomeArq, pdfIndividual.output("blob"));
+        } else {
+          await adicionarElementoAoPDF(pdfCombinado, folhaGrupoRef.current, i === 0);
+        }
+      }
+
+      const sujeitoGrupo = categoria || "Todos";
+      if (saida === "zip") {
+        const blob = await zip.generateAsync({ type: "blob" });
+        baixarBlob(blob, `${fatiaArquivo(config.label)}_Grupo-${fatiaArquivo(sujeitoGrupo)}_${dataArquivo(hojeISO())}.zip`);
+      } else {
+        pdfCombinado.save(`${fatiaArquivo(config.label)}_Grupo-${fatiaArquivo(sujeitoGrupo)}_${dataArquivo(hojeISO())}.pdf`);
+      }
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setGerandoGrupo(null);
+      setProgressoGrupo(null);
+      setConteudoGrupoAtual(null);
     }
   }
 
@@ -5968,12 +6101,18 @@ function CentralRelatorios({ usuario }) {
                   </select>
                 </div>
                 <div className="field">
-                  <label>Atleta</label>
-                  <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
-                    <option value="">Todos</option>
-                    {(atletas || []).map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}</option>)}
-                  </select>
+                  <label>Gerar para</label>
+                  <TabSelect opcoes={["Atleta único", "Grupo de atletas"]} valor={modo === "individual" ? "Atleta único" : "Grupo de atletas"} onChange={(v) => setModo(v === "Atleta único" ? "individual" : "grupo")} tamanho="sm" />
                 </div>
+                {modo === "individual" && (
+                  <div className="field">
+                    <label>Atleta</label>
+                    <select value={atletaId} onChange={e => setAtletaId(e.target.value)}>
+                      <option value="">Todos</option>
+                      {(atletas || []).map(a => <option key={a.id} value={a.id}>{nomeExibicao(a)}</option>)}
+                    </select>
+                  </div>
+                )}
                 {config && config.statusOpcoes.length > 0 && (
                   <div className="field">
                     <label>Desfecho / status</label>
@@ -5994,14 +6133,51 @@ function CentralRelatorios({ usuario }) {
                 <div className="field"><label>Cargo</label><input type="text" placeholder="Ex.: Médico Responsável" value={responsavelCargo} onChange={e => setResponsavelCargo(e.target.value)} /></div>
               </div>
 
-              <div className="form-actions" style={{ marginTop: 16 }}>
-                <button className="pill-btn primary" onClick={gerar} disabled={!config || carregando}>{carregando ? "Gerando..." : "Gerar relatório"}</button>
-                {conteudo && <button className="pill-btn" onClick={baixar} disabled={baixando}>{baixando ? "Preparando PDF..." : "Baixar PDF"}</button>}
-              </div>
+              {modo === "individual" ? (
+                <div className="form-actions" style={{ marginTop: 16 }}>
+                  <button className="pill-btn primary" onClick={gerar} disabled={!config || carregando}>{carregando ? "Gerando..." : "Gerar relatório"}</button>
+                  {conteudo && <button className="pill-btn" onClick={baixar} disabled={baixando}>{baixando ? "Preparando PDF..." : "Baixar PDF"}</button>}
+                </div>
+              ) : (
+                <div style={{ marginTop: 16 }}>
+                  <div className="chart-controls-note" style={{ marginBottom: 8 }}>
+                    Marque os atletas que entram no grupo{categoria ? ` (filtrados por ${categoria === "sub15" ? "Sub-15" : "Sub-17"})` : ""}:
+                  </div>
+                  <div className="form-actions" style={{ marginBottom: 10 }}>
+                    <button className="pill-btn" onClick={() => setGrupoIds(candidatosGrupo.map(a => a.id))} disabled={!!gerandoGrupo}>Selecionar todos</button>
+                    <button className="pill-btn" onClick={() => setGrupoIds([])} disabled={!!gerandoGrupo}>Limpar seleção</button>
+                    <button className="pill-btn" onClick={marcarComDadosNoPeriodo} disabled={!config || carregando || !!gerandoGrupo}>{carregando ? "Verificando..." : "Marcar com dados no período"}</button>
+                  </div>
+                  <div className="panel-body" style={{ maxHeight: 260, overflowY: "auto", border: "1px solid var(--line-soft)", borderRadius: 9, padding: "6px 4px" }}>
+                    {candidatosGrupo.length === 0 ? (
+                      <div className="empty-state">Nenhum atleta encontrado com esse filtro de categoria.</div>
+                    ) : candidatosGrupo.map(a => (
+                      <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", fontSize: 13.5, cursor: "pointer" }}>
+                        <input type="checkbox" checked={grupoIds.includes(a.id)} onChange={() => toggleGrupoId(a.id)} disabled={!!gerandoGrupo} />
+                        {nomeExibicao(a)}{a.categoria ? ` — ${a.categoria}` : ""}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="chart-controls-note" style={{ marginTop: 8 }}>{grupoIds.length} atleta(s) selecionado(s).</div>
+                  <div className="form-actions" style={{ marginTop: 12 }}>
+                    <button className="pill-btn primary" onClick={() => processarGrupo("zip")} disabled={!config || grupoIds.length === 0 || !!gerandoGrupo}>
+                      {gerandoGrupo === "zip" ? "Gerando..." : "Baixar PDFs em lote (.zip)"}
+                    </button>
+                    <button className="pill-btn" onClick={() => processarGrupo("combinado")} disabled={!config || grupoIds.length === 0 || !!gerandoGrupo}>
+                      {gerandoGrupo === "combinado" ? "Gerando..." : "Baixar PDF único (todos juntos)"}
+                    </button>
+                  </div>
+                  {progressoGrupo && (
+                    <div className="chart-controls-note" style={{ marginTop: 8 }}>
+                      Gerando relatório {progressoGrupo.atual} de {progressoGrupo.total} — {progressoGrupo.nome}...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {conteudo && config && (
+          {modo === "individual" && conteudo && config && (
             <div className="relatorio-preview-wrap" style={{ marginTop: 20 }}>
               <RelatorioModelo
                 innerRef={folhaRef}
@@ -6017,6 +6193,29 @@ function CentralRelatorios({ usuario }) {
                 linhasDetalhe={conteudo.linhasDetalhe}
                 resumoColorido={conteudo.resumoColorido}
                 graficos={conteudo.graficos}
+                responsavelNome={responsavelNome}
+                responsavelRegistro={responsavelRegistro}
+                responsavelCargo={responsavelCargo}
+              />
+            </div>
+          )}
+
+          {conteudoGrupoAtual && config && (
+            <div style={{ position: "absolute", left: "-10000px", top: 0 }}>
+              <RelatorioModelo
+                innerRef={folhaGrupoRef}
+                titulo={config.titulo}
+                subtitulo={config.subtituloDept}
+                periodoLabel={periodoLabel}
+                destinatario={destinatario}
+                totalLabel={config.totalLabel}
+                totalValor={conteudoGrupoAtual.conteudo.total}
+                resumoTexto={conteudoGrupoAtual.conteudo.resumoTexto}
+                pontosAtencao={conteudoGrupoAtual.conteudo.pontosAtencao}
+                colunasDetalhe={conteudoGrupoAtual.conteudo.colunasDetalhe}
+                linhasDetalhe={conteudoGrupoAtual.conteudo.linhasDetalhe}
+                resumoColorido={conteudoGrupoAtual.conteudo.resumoColorido}
+                graficos={conteudoGrupoAtual.conteudo.graficos}
                 responsavelNome={responsavelNome}
                 responsavelRegistro={responsavelRegistro}
                 responsavelCargo={responsavelCargo}
