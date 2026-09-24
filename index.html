@@ -350,6 +350,9 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
   font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px; letter-spacing:0.01em;
   background:var(--line-soft); color:var(--muted);
 }
+.atualizacao-tag.atleta{background:rgba(184,151,106,0.18); color:var(--navy);}
+.atualizacao-tag.jogo{background:rgba(94,54,138,0.12); color:#5e368a;}
+.atualizacao-tag.aviso{background:var(--vermelho-bg); color:var(--vermelho);}
 .atualizacao-tag.nova{background:var(--verde-bg); color:var(--verde);}
 .atualizacao-tag.melhoria{background:rgba(30,90,168,0.12); color:#1e5aa8;}
 .atualizacao-tag.correcao{background:var(--amarelo-bg); color:var(--amarelo);}
@@ -776,9 +779,15 @@ async function carregarTodosRegistros(chave) {
   return porAtleta;
 }
 
-/* ---------- Atualizações da plataforma (aba "Novidades") ---------- */
+/* ---------- Atualizações (aba "Atualizações") ----------
+   Mural de novidades do CT: não é só changelog do sistema — dá pra
+   publicar qualquer coisa nova (informação sobre atleta, resultado
+   de jogo, aviso, funcionalidade nova, melhoria, correção etc). */
 const COL_ATUALIZACOES = "ct_atualizacoes";
 const CATEGORIAS_ATUALIZACAO = [
+  { id: "atleta", label: "Atleta" },
+  { id: "jogo", label: "Resultado de jogo" },
+  { id: "aviso", label: "Aviso" },
   { id: "nova", label: "Nova funcionalidade" },
   { id: "melhoria", label: "Melhoria" },
   { id: "correcao", label: "Correção" },
@@ -5581,7 +5590,7 @@ function PainelAtualizacoes({ usuario }) {
       <div className="page-head">
         <div>
           <h1>Atualizações</h1>
-          <div className="crumb">CT Integrado · Meia Noite EC · novidades, melhorias e correções da plataforma</div>
+          <div className="crumb">CT Integrado · Meia Noite EC · novidades sobre atletas, jogos, avisos e a plataforma</div>
         </div>
         {ehAdmin && !mostrarForm && (
           <button className="pill-btn primary" onClick={() => setMostrarForm(true)}>+ Nova atualização</button>
