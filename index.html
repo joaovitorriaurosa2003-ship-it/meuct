@@ -88,6 +88,10 @@ input,select,textarea{font-family:inherit;}
 .sidebar-tab:hover{color:#fff; background:rgba(255,255,255,0.06);}
 .sidebar-tab.active{color:#fff; background:rgba(184,151,106,0.22); box-shadow:inset 2px 0 0 var(--gold);}
 .sidebar-tab .dot{width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.65; flex-shrink:0;}
+.badge-naolidas{
+  margin-left:auto; background:var(--gold); color:var(--navy); font-size:10.5px; font-weight:800;
+  border-radius:100px; min-width:18px; height:18px; padding:0 5px; display:flex; align-items:center; justify-content:center; line-height:1;
+}
 .sidebar-grupo{display:flex; flex-direction:column; gap:3px;}
 .sidebar-grupo-head{justify-content:flex-start;}
 .sidebar-grupo-head .sidebar-grupo-seta{margin-left:auto; opacity:.6; font-size:11px;}
@@ -335,6 +339,27 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 .pill-btn.primary{background:var(--navy); color:#fff; border-color:var(--navy);}
 .pill-btn.primary:hover{background:var(--navy-3);}
 .pill-btn:disabled{opacity:.5; cursor:not-allowed;}
+
+/* ---------- Atualizações (aba "Novidades") ---------- */
+.atualizacao-item{
+  background:#fff; border:1px solid var(--line-soft); border-radius:var(--radius); padding:16px 18px;
+  margin-bottom:12px; box-shadow:var(--shadow-sm);
+}
+.atualizacao-topo{display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;}
+.atualizacao-tag{
+  font-size:11px; font-weight:700; padding:3px 10px; border-radius:100px; letter-spacing:0.01em;
+  background:var(--line-soft); color:var(--muted);
+}
+.atualizacao-tag.nova{background:var(--verde-bg); color:var(--verde);}
+.atualizacao-tag.melhoria{background:rgba(30,90,168,0.12); color:#1e5aa8;}
+.atualizacao-tag.correcao{background:var(--amarelo-bg); color:var(--amarelo);}
+.atualizacao-data{font-size:12px; color:var(--muted); margin-left:auto;}
+.atualizacao-excluir{
+  border:none; background:transparent; color:var(--vermelho); font-size:12px; font-weight:600; cursor:pointer; padding:2px 4px;
+}
+.atualizacao-excluir:hover{text-decoration:underline;}
+.atualizacao-titulo{font-size:15px; font-weight:700; color:var(--navy); margin-bottom:4px;}
+.atualizacao-descricao{font-size:13.5px; color:var(--ink); line-height:1.55; white-space:pre-wrap;}
 
 @media (max-width: 900px){
   .kpi-row{grid-template-columns:repeat(2,1fr);}
@@ -751,6 +776,54 @@ async function carregarTodosRegistros(chave) {
   return porAtleta;
 }
 
+/* ---------- Atualizações da plataforma (aba "Novidades") ---------- */
+const COL_ATUALIZACOES = "ct_atualizacoes";
+const CATEGORIAS_ATUALIZACAO = [
+  { id: "nova", label: "Nova funcionalidade" },
+  { id: "melhoria", label: "Melhoria" },
+  { id: "correcao", label: "Correção" },
+];
+
+/** Carrega as atualizações mais recentes (mais nova primeiro). */
+async function carregarAtualizacoes(limite) {
+  let q = db.collection(COL_ATUALIZACOES).orderBy("criadoEm", "desc");
+  if (limite) q = q.limit(limite);
+  const snap = await q.get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** Cria uma nova entrada de atualização (só chamado pela tela de admin). */
+async function criarAtualizacao({ titulo, descricao, categoria }) {
+  await db.collection(COL_ATUALIZACOES).add({
+    titulo: (titulo || "").trim(),
+    descricao: (descricao || "").trim(),
+    categoria: categoria || "melhoria",
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+async function excluirAtualizacao(id) {
+  await db.collection(COL_ATUALIZACOES).doc(id).delete();
+}
+
+/** Timestamp (ms) mais recente entre "quando a pessoa viu a aba" salvo localmente por conta. */
+function chaveVistoAtualizacoes(usuario) {
+  return `ct_atualizacoes_visto_${(usuario && (usuario.id || usuario.email)) || "anon"}`;
+}
+function lerVistoAtualizacoes(usuario) {
+  try {
+    const v = localStorage.getItem(chaveVistoAtualizacoes(usuario));
+    return v ? Number(v) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+function marcarAtualizacoesVistas(usuario) {
+  try {
+    localStorage.setItem(chaveVistoAtualizacoes(usuario), String(Date.now()));
+  } catch (e) {}
+}
+
 /** Carrega as 6 áreas de uma vez (usado no Painel Admin, que precisa de tudo). */
 async function carregarTudo() {
   const [atletas, psiData, fisioData, fisiologiaData, medicinaData, socialData, perfData] = await Promise.all([
@@ -1030,6 +1103,27 @@ const HUBS = [
 function HubBar({ current, onNavigate, usuario, onSair }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [filtroAberto, setFiltroAberto] = useState(null);
+  const [naoLidas, setNaoLidas] = useState(0);
+
+  useEffect(() => {
+    if (current === "atualizacoes") {
+      setNaoLidas(0);
+      return;
+    }
+    let cancelado = false;
+    carregarAtualizacoes(20)
+      .then((lista) => {
+        if (cancelado) return;
+        const visto = lerVistoAtualizacoes(usuario);
+        const novas = lista.filter((a) => {
+          const t = a.criadoEm && typeof a.criadoEm.toDate === "function" ? a.criadoEm.toDate().getTime() : 0;
+          return t > visto;
+        });
+        setNaoLidas(novas.length);
+      })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [current]);
   const iniciais = (usuario.nome || usuario.email || "?").trim().split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   const hubsVisiveis = HUBS.filter((h) => temPermissao(usuario, h.id));
   const porId = {};
@@ -1052,6 +1146,7 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
 
   const itensNav = [
     { id: "elenco", label: "Elenco" },
+    { id: "atualizacoes", label: "Atualizações" },
     ...itensSoltos.map((h) => ({ id: h.id, label: h.label })),
     ...gruposMenu.flatMap((g) => g.itens),
     ...(podeRelatorios ? [{ id: "relatorios", label: "Relatórios" }] : []),
@@ -1096,6 +1191,15 @@ function HubBar({ current, onNavigate, usuario, onSair }) {
         >
           <span className="dot"></span>
           Elenco
+        </button>
+        <button
+          type="button"
+          onClick={() => navegar("atualizacoes")}
+          className={"sidebar-tab" + (current === "atualizacoes" ? " active" : "")}
+        >
+          <span className="dot"></span>
+          Atualizações
+          {naoLidas > 0 && <span className="badge-naolidas">{naoLidas}</span>}
         </button>
         {itensSoltos.map((it) => (
           <button
@@ -5376,6 +5480,150 @@ function EmbedExterno({ url, titulo }) {
   );
 }
 
+/* ==================== Atualizações da plataforma ==================== */
+
+function labelCategoriaAtualizacao(id) {
+  const c = CATEGORIAS_ATUALIZACAO.find((x) => x.id === id);
+  return c ? c.label : id || "—";
+}
+
+/** Formata um Firestore Timestamp (ou já convertido) em "DD/MM/AAAA às HH:MM". */
+function formatarDataHoraAtualizacao(ts) {
+  if (!ts) return "—";
+  const d = typeof ts.toDate === "function" ? ts.toDate() : new Date(ts);
+  if (isNaN(d.getTime())) return "—";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()} às ${hh}:${mi}`;
+}
+
+function FormNovaAtualizacao({ onSalvar, onCancelar }) {
+  const { useState } = React;
+  const [titulo, setTitulo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [categoria, setCategoria] = useState("nova");
+  const [salvando, setSalvando] = useState(false);
+
+  async function handleSubmit() {
+    if (!titulo.trim() || salvando) return;
+    setSalvando(true);
+    try {
+      await onSalvar({ titulo, descricao, categoria });
+      setTitulo(""); setDescricao(""); setCategoria("nova");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="form-panel">
+      <div className="form-grid">
+        <div className="field">
+          <label>Título</label>
+          <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex.: Relatórios em grupo (.zip)" />
+        </div>
+        <div className="field">
+          <label>Categoria</label>
+          <select value={categoria} onChange={e => setCategoria(e.target.value)}>
+            {CATEGORIAS_ATUALIZACAO.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="form-grid full">
+        <div className="field">
+          <label>Descrição</label>
+          <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Explique em poucas linhas o que mudou e como usar." />
+        </div>
+      </div>
+      <div className="form-actions">
+        <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
+        <button className="pill-btn primary" onClick={handleSubmit} disabled={!titulo.trim() || salvando}>{salvando ? "Publicando..." : "Publicar atualização"}</button>
+      </div>
+    </div>
+  );
+}
+
+function PainelAtualizacoes({ usuario }) {
+  const { useState, useEffect } = React;
+  const [lista, setLista] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [mostrarForm, setMostrarForm] = useState(false);
+  const ehAdmin = usuario.role === "admin";
+
+  async function recarregar() {
+    try {
+      setLista(await carregarAtualizacoes(100));
+    } catch (e) {
+      setErro(e.message);
+    }
+  }
+
+  useEffect(() => {
+    recarregar();
+    marcarAtualizacoesVistas(usuario);
+  }, []);
+
+  async function salvar(dados) {
+    await criarAtualizacao(dados);
+    setMostrarForm(false);
+    await recarregar();
+  }
+
+  async function excluir(id) {
+    await excluirAtualizacao(id);
+    await recarregar();
+  }
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Atualizações</h1>
+          <div className="crumb">CT Integrado · Meia Noite EC · novidades, melhorias e correções da plataforma</div>
+        </div>
+        {ehAdmin && !mostrarForm && (
+          <button className="pill-btn primary" onClick={() => setMostrarForm(true)}>+ Nova atualização</button>
+        )}
+      </div>
+
+      {erro && (
+        <div className="access-note" style={{ background: "var(--vermelho-bg)", borderColor: "var(--vermelho)" }}>
+          <span><b>Não consegui carregar as atualizações:</b> {erro}</span>
+        </div>
+      )}
+
+      {ehAdmin && mostrarForm && (
+        <div className="panel" style={{ marginBottom: 20 }}>
+          <div className="panel-head"><h3>Nova atualização</h3></div>
+          <FormNovaAtualizacao onSalvar={salvar} onCancelar={() => setMostrarForm(false)} />
+        </div>
+      )}
+
+      {lista === null ? (
+        <div className="empty-state">Carregando...</div>
+      ) : lista.length === 0 ? (
+        <div className="empty-state">Nenhuma atualização publicada ainda.</div>
+      ) : (
+        <div>
+          {lista.map((a) => (
+            <div className="atualizacao-item" key={a.id}>
+              <div className="atualizacao-topo">
+                <span className={"atualizacao-tag " + (a.categoria || "melhoria")}>{labelCategoriaAtualizacao(a.categoria)}</span>
+                <span className="atualizacao-data">{formatarDataHoraAtualizacao(a.criadoEm)}</span>
+                {ehAdmin && <button className="atualizacao-excluir" onClick={() => excluir(a.id)}>Excluir</button>}
+              </div>
+              <div className="atualizacao-titulo">{a.titulo}</div>
+              {a.descricao && <div className="atualizacao-descricao">{a.descricao}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ==================== Central de Relatórios ==================== */
 
 /** Verifica se uma data ISO ("YYYY-MM-DD") cai dentro do período escolhido nos filtros do relatório. */
@@ -6233,6 +6481,7 @@ function AppLogado({ usuario }) {
 
   const paginasComponente = {
     elenco: <ViewElenco usuario={usuario} />,
+    atualizacoes: <PainelAtualizacoes usuario={usuario} />,
     admin: <ViewAdmin usuario={usuario} />,
     psicologia: <ViewPsicologia />,
     fisioterapia: <ViewFisioterapia usuario={usuario} />,
@@ -6246,6 +6495,7 @@ function AppLogado({ usuario }) {
   };
 
   const podeVerPagina = pagina === "elenco" ? true
+    : pagina === "atualizacoes" ? true
     : pagina === "usuarios" ? usuario.role === "admin"
     : pagina === "relatorios" ? temAcessoRelatorios(usuario)
     : temPermissao(usuario, pagina);
