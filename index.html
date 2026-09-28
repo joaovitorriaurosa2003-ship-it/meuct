@@ -3169,6 +3169,7 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
   const iniciais = atleta.nome.split(" ").map(p => p[0]).slice(0, 2).join("");
   const [editando, setEditando] = useState(false);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [erroFoto, setErroFoto] = useState(null);
   const inputFotoRef = useRef(null);
   const podeEditar = podeGerenciarAtletas(usuario);
 
@@ -3177,6 +3178,7 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
     e.target.value = "";
     if (!arquivo || enviandoFoto) return;
     setEnviandoFoto(true);
+    setErroFoto(null);
     try {
       const ext = (arquivo.name.match(/\.[^.]+$/) || [".jpg"])[0];
       const ref = storage.ref().child(`fotos_atletas/${atletaId}${ext}`);
@@ -3184,6 +3186,8 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
       const url = await ref.getDownloadURL();
       await db.collection(COL_ATLETAS).doc(atletaId).update({ foto: url });
       onRecarregar();
+    } catch (err) {
+      setErroFoto((err && err.message) || "Falha ao enviar a foto.");
     } finally {
       setEnviandoFoto(false);
     }
@@ -3224,6 +3228,11 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
         </div>
         <button className="pill-btn" style={{marginLeft:"auto"}} onClick={() => window.print()}>Gerar relatório PDF</button>
       </div>
+      {erroFoto && (
+        <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)", marginBottom:16}}>
+          <span><b>Erro ao enviar a foto:</b> {erroFoto}</span>
+        </div>
+      )}
       <div className="print-only" style={{marginBottom:16, color:"var(--navy)"}}>
         <div style={{fontSize:12, color:"#667"}}>Relatório individual gerado em {formatarData(hojeISO())} · CT Integrado · Meia Noite EC</div>
       </div>
@@ -4611,6 +4620,7 @@ function ImportadorFotosAtletas({ atletas, onImportado }) {
   const [enviando, setEnviando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [resultado, setResultado] = useState(null);
+  const [erro, setErro] = useState(null);
 
   function nomeArquivoSemExtensao(nome) {
     return nome.replace(/\.[^.]+$/, "").trim();
@@ -4632,21 +4642,35 @@ function ImportadorFotosAtletas({ atletas, onImportado }) {
     if (enviando) return;
     setEnviando(true);
     setProgresso(0);
+    setErro(null);
     let enviados = 0;
+    const falhas = [];
     const comMatch = linhas.filter((l) => l.atleta);
     for (const linha of comMatch) {
-      const ext = (linha.file.name.match(/\.[^.]+$/) || [".jpg"])[0];
-      const ref = storage.ref().child(`fotos_atletas/${linha.atleta.id}${ext}`);
-      await ref.put(linha.file);
-      const url = await ref.getDownloadURL();
-      await db.collection(COL_ATLETAS).doc(linha.atleta.id).update({ foto: url });
-      enviados++;
-      setProgresso(enviados);
+      try {
+        const ext = (linha.file.name.match(/\.[^.]+$/) || [".jpg"])[0];
+        const ref = storage.ref().child(`fotos_atletas/${linha.atleta.id}${ext}`);
+        await ref.put(linha.file);
+        const url = await ref.getDownloadURL();
+        await db.collection(COL_ATLETAS).doc(linha.atleta.id).update({ foto: url });
+        enviados++;
+        setProgresso(enviados);
+      } catch (err) {
+        falhas.push({ nome: linha.file.name, msg: (err && err.message) || String(err) });
+        // Se o primeiro arquivo já falhar, muito provavelmente é um problema geral
+        // (Storage não configurado, regras bloqueando etc.) — para de bater a cabeça
+        // tentando os outros um por um e mostra o erro de uma vez.
+        if (enviados === 0 && falhas.length >= 1) break;
+      }
     }
     setEnviando(false);
-    setResultado({ enviados, semMatch: linhas.length - comMatch.length });
-    setLinhas([]);
-    onImportado();
+    if (falhas.length > 0 && enviados === 0) {
+      setErro(falhas[0].msg);
+    } else {
+      setResultado({ enviados, semMatch: linhas.length - comMatch.length, falhas: falhas.length });
+      setLinhas([]);
+      onImportado();
+    }
   }
 
   const comMatch = linhas.filter((l) => l.atleta);
@@ -4681,9 +4705,15 @@ function ImportadorFotosAtletas({ atletas, onImportado }) {
         </div>
       )}
 
+      {erro && (
+        <div className="access-note" style={{background:"var(--vermelho-bg)", borderColor:"var(--vermelho)", marginTop:14}}>
+          <span><b>Erro ao enviar:</b> {erro}</span>
+        </div>
+      )}
+
       {resultado && (
         <div className="access-note" style={{background:"var(--verde-bg)", borderColor:"var(--verde)", marginTop:14}}>
-          <span><b>Importado:</b> {resultado.enviados} foto(s). {resultado.semMatch > 0 ? `${resultado.semMatch} arquivo(s) sem atleta correspondente.` : ""}</span>
+          <span><b>Importado:</b> {resultado.enviados} foto(s). {resultado.semMatch > 0 ? `${resultado.semMatch} arquivo(s) sem atleta correspondente.` : ""} {resultado.falhas > 0 ? `${resultado.falhas} arquivo(s) falharam no envio.` : ""}</span>
         </div>
       )}
     </div>
