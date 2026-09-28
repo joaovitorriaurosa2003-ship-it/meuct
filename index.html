@@ -20,6 +20,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -302,7 +303,11 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 
 /* ---------- Perfil do atleta ---------- */
 .profile-head{display:flex; align-items:center; gap:16px; margin-bottom:22px;}
-.profile-avatar{width:56px; height:56px; border-radius:50%; background:var(--navy); color:var(--gold-soft); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:20px; flex-shrink:0;}
+.profile-avatar{width:56px; height:56px; border-radius:50%; background:var(--navy); color:var(--gold-soft); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:20px; flex-shrink:0; overflow:hidden; position:relative;}
+.profile-foto{width:100%; height:100%; object-fit:cover; border-radius:inherit;}
+.profile-avatar.clicavel{cursor:pointer;}
+.profile-avatar-hint{position:absolute; inset:0; background:rgba(10,20,40,0.55); color:#fff; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; text-align:center; opacity:0; transition:opacity .12s ease;}
+.profile-avatar.clicavel:hover .profile-avatar-hint{opacity:1;}
 .profile-name{font-size:24px; font-weight:700; color:var(--navy);}
 .profile-meta{font-size:13px; color:var(--muted); margin-top:2px; font-weight:500;}
 .back-link{display:inline-flex; align-items:center; gap:5px; font-size:13px; color:var(--muted); cursor:pointer; margin-bottom:16px; font-weight:600; background:none; border:none; padding:0;}
@@ -461,7 +466,9 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
   color:var(--navy); font-weight:800; font-size:15px; letter-spacing:-0.02em;
   display:flex; align-items:center; justify-content:center;
   box-shadow:0 3px 8px rgba(0,0,0,0.25);
+  overflow:hidden;
 }
+.jersey-foto{width:100%; height:100%; object-fit:cover; border-radius:inherit;}
 .jersey-nome{font-size:12.5px; font-weight:700; color:#fff; line-height:1.3; margin-bottom:2px;}
 .jersey-cat{font-size:10.5px; color:rgba(255,255,255,0.55); margin-bottom:8px;}
 .jersey-sinal{
@@ -629,6 +636,7 @@ if (!firebase.apps.length) {
 }
 const db = firebase.firestore();
 const auth = firebase.auth();
+const storage = firebase.storage();
 
 const COL_USUARIOS = "ct_usuarios";
 
@@ -2151,7 +2159,7 @@ function ElencoPorPosicao({ atletasComSinal, onOpenAtleta }) {
     return (
       <div key={d.id} className="jersey-btn" onClick={() => onOpenAtleta(d.id)}>
         <div className={"jersey-sinal " + d.risco}></div>
-        <div className="jersey-badge">{iniciais}</div>
+        <div className="jersey-badge">{d.foto ? <img className="jersey-foto" src={d.foto} alt="" /> : iniciais}</div>
         <div className="jersey-nome">{nomeExibicao(d)}</div>
         <div className="jersey-cat">{d.posicao || "Posição não definida"}</div>
         {outrasPosicoes && <div className="jersey-cat" style={{opacity:0.65, fontSize:"0.85em"}}>Também joga: {outrasPosicoes}</div>}
@@ -2663,6 +2671,7 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
           <h3>Todos os atletas ({linha.length})</h3>
           {podeGerenciar && (
             <div style={{display:"flex", gap:8}}>
+              <button className={"pill-btn" + (modo === "fotos" ? " primary" : "")} onClick={() => setModo(modo === "fotos" ? null : "fotos")}>{modo === "fotos" ? "Fechar" : "Importar fotos"}</button>
               <button className={"pill-btn" + (modo === "mesclar" ? " primary" : "")} onClick={() => setModo(modo === "mesclar" ? null : "mesclar")}>Mesclar duplicata</button>
               <button className={"pill-btn primary"} onClick={() => setModo(modo === "novo" ? null : "novo")}>{modo === "novo" ? "Fechar" : "+ Novo atleta"}</button>
             </div>
@@ -2678,6 +2687,11 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
         {modo === "novo" && podeGerenciar && (
           <FormAtleta atleta={null} onSalvar={salvarNovo} onCancelar={() => setModo(null)} />
         )}
+        {modo === "fotos" && podeGerenciar && (
+          <div style={{padding:"14px 20px 20px"}}>
+            <ImportadorFotosAtletas atletas={dados.atletas} onImportado={onRecarregar} />
+          </div>
+        )}
         {modo === "mesclar" && podeGerenciar && (
           <MesclarAtletas atletas={dados.atletas} onMesclado={() => { setModo(null); onRecarregar(); }} />
         )}
@@ -2690,10 +2704,15 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
 
         <div className="panel-body">
           <table>
-            <thead><tr><th>Nome</th><th>Categoria</th><th>Origem</th><th>Status</th>{podeGerenciar && <th></th>}</tr></thead>
+            <thead><tr><th></th><th>Nome</th><th>Categoria</th><th>Origem</th><th>Status</th>{podeGerenciar && <th></th>}</tr></thead>
             <tbody>
               {linha.map(d => (
                 <tr key={d.id} className="clickable">
+                  <td onClick={() => onOpenAtleta(d.id)} style={{width:34}}>
+                    <div className="jersey-badge" style={{width:30, height:30, margin:0, fontSize:11, borderRadius:7}}>
+                      {d.foto ? <img className="jersey-foto" src={d.foto} alt="" /> : d.nome.split(" ").map(p => p[0]).slice(0, 2).join("").toUpperCase()}
+                    </div>
+                  </td>
                   <td style={{fontWeight:600, color:"var(--navy)"}} onClick={() => onOpenAtleta(d.id)}>{nomeExibicao(d)}{d.pendente_vinculo ? " ⚠︎ pendente de vínculo" : ""}</td>
                   <td onClick={() => onOpenAtleta(d.id)}>{d.categoria || "—"}</td>
                   <td className="muted" onClick={() => onOpenAtleta(d.id)}>{d.origem || "—"}</td>
@@ -3143,13 +3162,32 @@ function MedicinaAtleta({ dados, atletaId }) {
 }
 
 function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
-  const { useState } = React;
+  const { useState, useRef } = React;
   const atleta = dados.atletas.find(a => a.id === atletaId);
   if (!atleta) return <div className="empty-state">Atleta não encontrado.</div>;
   const { risco } = calcularSemaforo(atletaId, dados);
   const iniciais = atleta.nome.split(" ").map(p => p[0]).slice(0, 2).join("");
   const [editando, setEditando] = useState(false);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const inputFotoRef = useRef(null);
   const podeEditar = podeGerenciarAtletas(usuario);
+
+  async function trocarFoto(e) {
+    const arquivo = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!arquivo || enviandoFoto) return;
+    setEnviandoFoto(true);
+    try {
+      const ext = (arquivo.name.match(/\.[^.]+$/) || [".jpg"])[0];
+      const ref = storage.ref().child(`fotos_atletas/${atletaId}${ext}`);
+      await ref.put(arquivo);
+      const url = await ref.getDownloadURL();
+      await db.collection(COL_ATLETAS).doc(atletaId).update({ foto: url });
+      onRecarregar();
+    } finally {
+      setEnviandoFoto(false);
+    }
+  }
 
   const temPsi = (dados.psiData[atletaId] || []).length > 0;
   const temPerf = (dados.perfData[atletaId] || []).length > 0;
@@ -3169,7 +3207,16 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
     <div>
       <button className="back-link" onClick={onBack}>&larr; Voltar</button>
       <div className="profile-head">
-        <div className="profile-avatar">{iniciais}</div>
+        <div
+          className={"profile-avatar" + (podeEditar ? " clicavel" : "")}
+          onClick={() => podeEditar && !enviandoFoto && inputFotoRef.current && inputFotoRef.current.click()}
+        >
+          {atleta.foto ? <img className="profile-foto" src={atleta.foto} alt="" /> : iniciais}
+          {podeEditar && <div className="profile-avatar-hint">{enviandoFoto ? "Enviando..." : "Trocar foto"}</div>}
+          {podeEditar && (
+            <input ref={inputFotoRef} type="file" accept="image/*" style={{display:"none"}} onChange={trocarFoto} />
+          )}
+        </div>
         <div>
           <div className="profile-name">{nomeExibicao(atleta)}</div>
           {atleta.apelido && <div className="profile-meta" style={{marginTop:-2, marginBottom:4}}>{atleta.nome}</div>}
@@ -4549,6 +4596,94 @@ function ImportadorMeuPsiCSV({ atletas, registrosPsi, onImportado }) {
       {resultado && (
         <div className="access-note" style={{background:"var(--verde-bg)", borderColor:"var(--verde)", marginTop:14}}>
           <span><b>Importado:</b> {resultado.importados} registro(s) novo(s), {resultado.pulados} pulado(s) (já existiam), {resultado.naoEncontrados} atleta(s) do arquivo não encontrado(s) no elenco.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Importador em massa de fotos dos atletas — casa cada arquivo pelo nome (sem extensão)
+ *  com o campo "nome" cadastrado do atleta, sobe pro Storage em fotos_atletas/{atletaId}.<ext>
+ *  e grava a URL pública em ct_atletas/{atletaId}.foto. */
+function ImportadorFotosAtletas({ atletas, onImportado }) {
+  const { useState } = React;
+  const [linhas, setLinhas] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+  const [progresso, setProgresso] = useState(0);
+  const [resultado, setResultado] = useState(null);
+
+  function nomeArquivoSemExtensao(nome) {
+    return nome.replace(/\.[^.]+$/, "").trim();
+  }
+
+  function encontrarAtleta(nomeArquivo) {
+    const alvo = nomeArquivoSemExtensao(nomeArquivo).toLowerCase();
+    return atletas.find((a) => (a.nome || "").trim().toLowerCase() === alvo) || null;
+  }
+
+  function onFilesSelected(e) {
+    const arquivos = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
+    e.target.value = "";
+    setLinhas(arquivos.map((file) => ({ file, atleta: encontrarAtleta(file.name) })));
+    setResultado(null);
+  }
+
+  async function confirmarEnvio() {
+    if (enviando) return;
+    setEnviando(true);
+    setProgresso(0);
+    let enviados = 0;
+    const comMatch = linhas.filter((l) => l.atleta);
+    for (const linha of comMatch) {
+      const ext = (linha.file.name.match(/\.[^.]+$/) || [".jpg"])[0];
+      const ref = storage.ref().child(`fotos_atletas/${linha.atleta.id}${ext}`);
+      await ref.put(linha.file);
+      const url = await ref.getDownloadURL();
+      await db.collection(COL_ATLETAS).doc(linha.atleta.id).update({ foto: url });
+      enviados++;
+      setProgresso(enviados);
+    }
+    setEnviando(false);
+    setResultado({ enviados, semMatch: linhas.length - comMatch.length });
+    setLinhas([]);
+    onImportado();
+  }
+
+  const comMatch = linhas.filter((l) => l.atleta);
+  const semMatch = linhas.filter((l) => !l.atleta);
+
+  return (
+    <div>
+      <div className="access-note" style={{marginBottom:12}}>
+        <span>Selecione várias fotos de uma vez. O nome de cada arquivo (sem a extensão) precisa ser <b>idêntico</b> ao nome cadastrado do atleta — ex.: "Pedro Kamau Cordeiro Rocha.jpg".</span>
+      </div>
+      <input type="file" accept="image/*" multiple onChange={onFilesSelected} disabled={enviando} />
+
+      {linhas.length > 0 && (
+        <div style={{marginTop:14}}>
+          <table>
+            <thead><tr><th>Arquivo</th><th>Atleta reconhecido</th></tr></thead>
+            <tbody>
+              {linhas.map((l, idx) => (
+                <tr key={idx}>
+                  <td>{l.file.name}</td>
+                  <td>{l.atleta ? <span className="badge verde">{nomeExibicao(l.atleta)}</span> : <span className="badge vermelho">Não encontrado</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{display:"flex", alignItems:"center", gap:10, marginTop:12}}>
+            <button className="pill-btn primary" disabled={enviando || comMatch.length === 0} onClick={confirmarEnvio}>
+              {enviando ? `Enviando ${progresso}/${comMatch.length}...` : `Importar ${comMatch.length} foto(s)`}
+            </button>
+            {semMatch.length > 0 && <span className="muted" style={{fontSize:12.5}}>{semMatch.length} arquivo(s) sem atleta correspondente não serão importados.</span>}
+          </div>
+        </div>
+      )}
+
+      {resultado && (
+        <div className="access-note" style={{background:"var(--verde-bg)", borderColor:"var(--verde)", marginTop:14}}>
+          <span><b>Importado:</b> {resultado.enviados} foto(s). {resultado.semMatch > 0 ? `${resultado.semMatch} arquivo(s) sem atleta correspondente.` : ""}</span>
         </div>
       )}
     </div>
