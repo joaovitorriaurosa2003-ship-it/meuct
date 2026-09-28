@@ -4325,20 +4325,28 @@ function parseLinhaCsv(linha) {
 function parseMeuPsiCsv(texto) {
   const linhas = texto.split(/\r?\n/);
   const n = linhas.length;
+  // Export de grupo: começa com linhas "Chave: valor", uma seção de médias e o
+  // marcador "DADOS INDIVIDUAIS" antes dos blocos "--- Nome ---" de cada atleta.
+  // Export de atleta único: não tem nada disso, começa direto em "RESUMO" — nesse
+  // caso criamos um único atleta "implícito" e pegamos o nome do campo "Paciente".
+  const ehExportDeGrupo = linhas.some((l) => l.trim() === "DADOS INDIVIDUAIS");
   let i = 0;
 
   const meta = {};
-  while (i < n && linhas[i].trim() !== "") {
-    const linha = linhas[i];
-    const idx = linha.indexOf(":");
-    if (idx !== -1) meta[linha.slice(0, idx).trim()] = linha.slice(idx + 1).trim();
+  if (ehExportDeGrupo) {
+    while (i < n && linhas[i].trim() !== "") {
+      const linha = linhas[i];
+      const idx = linha.indexOf(":");
+      if (idx !== -1) meta[linha.slice(0, idx).trim()] = linha.slice(idx + 1).trim();
+      i++;
+    }
+    while (i < n && linhas[i].trim() !== "DADOS INDIVIDUAIS") i++;
     i++;
   }
-  while (i < n && linhas[i].trim() !== "DADOS INDIVIDUAIS") i++;
-  i++;
 
   const atletas = [];
-  let atletaAtual = null;
+  let atletaAtual = ehExportDeGrupo ? null : { nome: null, registros: [] };
+  if (atletaAtual) atletas.push(atletaAtual);
   let secaoAtual = null;
 
   while (i < n) {
@@ -4357,7 +4365,7 @@ function parseMeuPsiCsv(texto) {
     if (!atletaAtual) { i++; continue; }
 
     if (linha === "") { secaoAtual = null; i++; continue; }
-    if (linha === "RESUMO") { secaoAtual = { ignorar: true }; i++; continue; }
+    if (linha === "RESUMO") { secaoAtual = { resumo: true, colunas: null }; i++; continue; }
 
     const mHist = linha.match(/^(.+?)\s*\(HIST[OÓ]RICO\)$/i);
     if (mHist) {
@@ -4371,7 +4379,16 @@ function parseMeuPsiCsv(texto) {
       continue;
     }
 
-    if (secaoAtual && secaoAtual.ignorar) { i++; continue; }
+    if (secaoAtual && secaoAtual.resumo) {
+      // Seção RESUMO: "Campo","Valor" — só nos interessa "Paciente", pra exports
+      // de atleta único onde não veio nenhum "--- Nome ---" antes. O resto (contadores
+      // de tarefas etc.) não é medição e é ignorado.
+      const camposResumo = parseLinhaCsv(linhaRaw);
+      if (!secaoAtual.colunas) { secaoAtual.colunas = camposResumo; i++; continue; }
+      if (camposResumo[0] === "Paciente" && !atletaAtual.nome) atletaAtual.nome = (camposResumo[1] || "").trim();
+      i++;
+      continue;
+    }
 
     if (secaoAtual) {
       const campos = parseLinhaCsv(linhaRaw);
@@ -4415,7 +4432,7 @@ function parseMeuPsiCsv(texto) {
     i++;
   }
 
-  return { grupo: meta["GRUPO"] || meta["Grupo"] || "", dataExport: meta["Data"] || "", atletas };
+  return { grupo: meta["GRUPO"] || meta["Grupo"] || "", dataExport: meta["Data"] || "", atletas: atletas.filter((a) => a.nome) };
 }
 
 function ImportadorMeuPsiCSV({ atletas, registrosPsi, onImportado }) {
