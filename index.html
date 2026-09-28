@@ -638,6 +638,24 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 const storage = firebase.storage();
 
+/** O SDK do Storage fica retentando indefinidamente em erros de rede (ex.: bucket
+ *  inexistente, dá 404 no preflight e ele insiste pra sempre sem nunca rejeitar a
+ *  Promise). Isso trava a UI em "Enviando 0/N" pra sempre sem gerar nenhum erro.
+ *  Essa função força uma desistência depois de `timeoutMs` com uma mensagem útil. */
+function subirComTimeout(ref, arquivo, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const task = ref.put(arquivo);
+    const timer = setTimeout(() => {
+      try { task.cancel(); } catch (e) {}
+      reject(new Error("Tempo esgotado enviando a foto. O mais provável é que o Storage do Firebase ainda não foi criado nesse projeto — confirme em Firebase Console → Storage → \"Get started\"."));
+    }, timeoutMs);
+    task.then(
+      (snap) => { clearTimeout(timer); resolve(snap); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
 const COL_USUARIOS = "ct_usuarios";
 
 /** E-mail que sempre vira Admin automaticamente ao criar conta pela primeira vez. */
@@ -3182,7 +3200,7 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
     try {
       const ext = (arquivo.name.match(/\.[^.]+$/) || [".jpg"])[0];
       const ref = storage.ref().child(`fotos_atletas/${atletaId}${ext}`);
-      await ref.put(arquivo);
+      await subirComTimeout(ref, arquivo, 15000);
       const url = await ref.getDownloadURL();
       await db.collection(COL_ATLETAS).doc(atletaId).update({ foto: url });
       onRecarregar();
@@ -4650,7 +4668,7 @@ function ImportadorFotosAtletas({ atletas, onImportado }) {
       try {
         const ext = (linha.file.name.match(/\.[^.]+$/) || [".jpg"])[0];
         const ref = storage.ref().child(`fotos_atletas/${linha.atleta.id}${ext}`);
-        await ref.put(linha.file);
+        await subirComTimeout(ref, linha.file, 15000);
         const url = await ref.getDownloadURL();
         await db.collection(COL_ATLETAS).doc(linha.atleta.id).update({ foto: url });
         enviados++;
