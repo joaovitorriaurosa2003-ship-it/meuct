@@ -676,13 +676,13 @@ const MODULOS = [
 /**
  * Grupos de acesso rápido — pacotes de módulos pra liberar de uma vez pra um
  * colaborador, de acordo com a área que ele atua: Campo (comissão técnica,
- * acesso a todos os dados do atleta), Departamento Médico (fisiologia,
- * fisioterapia, psicologia e medicina) e Social (psicologia e serviço social).
- * Aplicar um grupo substitui os módulos liberados do colaborador pelo pacote;
- * dá pra ajustar módulo a módulo depois, normalmente.
+ * só Treinadores e Desempenho — sem dado clínico de outras áreas), Departamento
+ * Médico (fisiologia, fisioterapia, psicologia e medicina) e Social (psicologia
+ * e serviço social). Aplicar um grupo substitui os módulos liberados do
+ * colaborador pelo pacote; dá pra ajustar módulo a módulo depois, normalmente.
  */
 const GRUPOS_ACESSO = [
-  { id: "campo", label: "Campo", modulos: ["treinador", "psicologia", "fisioterapia", "fisiologia", "medicina", "social", "desempenho"] },
+  { id: "campo", label: "Campo", modulos: ["treinador", "desempenho"] },
   { id: "dm", label: "Departamento Médico", modulos: ["fisioterapia", "fisiologia", "medicina", "psicologia"] },
   { id: "grupo_social", label: "Social", modulos: ["psicologia", "social"] },
 ];
@@ -4738,14 +4738,23 @@ function ImportadorFotosAtletas({ atletas, onImportado }) {
   );
 }
 
-function PainelTreinador() {
+/**
+ * Painel da Comissão Técnica — mesma visão completa que o Admin usa no
+ * Elenco (carregarPermitido + PerfilAtleta): a lista mostra o semáforo
+ * consolidado, e o perfil de cada atleta mostra todas as áreas que o
+ * treinador tem permissão de ver (normalmente Desempenho; outras áreas
+ * aparecem também se o colaborador tiver módulos extras liberados).
+ */
+function PainelTreinador({ usuario }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(null);
   const [atletaAberto, setAtletaAberto] = useState(null);
 
-  useEffect(() => {
-    carregarTudo().then(setDados).catch(e => setErro(e.message));
-  }, []);
+  function recarregar() {
+    return carregarPermitido(usuario).then(setDados).catch(e => setErro(e.message));
+  }
+
+  useEffect(() => { recarregar(); }, []);
 
   if (erro) {
     return (
@@ -4764,22 +4773,17 @@ function PainelTreinador() {
   const contagem = { verde: 0, amarelo: 0, vermelho: 0 };
   linha.forEach(d => contagem[d.risco]++);
 
-  const atleta = atletaAberto ? linha.find(a => a.id === atletaAberto) : null;
-
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h1>{atleta ? nomeExibicao(atleta) : "Painel da Comissão Técnica"}</h1>
-          <div className="crumb">CT Integrado · Meia Noite EC · visão de semáforo, sem dado clínico</div>
+          <h1>{atletaAberto ? "Perfil do atleta" : "Painel da Comissão Técnica"}</h1>
+          <div className="crumb">CT Integrado · Meia Noite EC · mesma visão do Elenco, de acordo com suas permissões</div>
         </div>
       </div>
 
-      {!atleta && (
+      {!atletaAberto && (
         <React.Fragment>
-          <div className="access-note admin">
-            <span><b>Modo Comissão Técnica:</b> este painel mostra só o sinal consolidado de cada atleta, cruzando todas as áreas. Nenhum dado clínico, social ou de avaliação bruta aparece aqui — para isso, use o Painel Admin.</span>
-          </div>
           <div className="kpi-row">
             <div className="kpi-card"><div className="label">Atletas monitorados</div><div className="value">{dados.atletas.length}</div></div>
             <div className="kpi-card acento-verde"><div className="label">Sem alerta</div><div className="value verde">{contagem.verde}</div></div>
@@ -4790,25 +4794,8 @@ function PainelTreinador() {
         </React.Fragment>
       )}
 
-      {atleta && (
-        <div>
-          <button className="back-link" onClick={() => setAtletaAberto(null)}>&larr; Voltar ao elenco</button>
-          <div className="panel">
-            <div className="panel-head"><h3>Sinal atual: {atleta.risco === "verde" ? "Regular" : atleta.risco === "amarelo" ? "Atenção" : "Prioridade"}</h3></div>
-            <div className="panel-body" style={{padding:"16px 20px"}}>
-              {atleta.sinais.length === 0 ? (
-                <div className="empty-state">Sem pendências em nenhuma área no momento.</div>
-              ) : (
-                <div className="flags" style={{gap:8}}>
-                  {atleta.sinais.map((s, i) => <span key={i} className={"flag " + s.area} style={{fontSize:13, padding:"6px 12px"}}>{s.label}</span>)}
-                </div>
-              )}
-              <div className="access-note" style={{marginTop:16}}>
-                <span>Este painel mostra só quais áreas sinalizaram atenção — para o detalhe clínico, fale com o profissional responsável pela área ou acesse o Painel Admin.</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      {atletaAberto && (
+        <PerfilAtleta atletaId={atletaAberto} onBack={() => setAtletaAberto(null)} dados={dados} onRecarregar={recarregar} usuario={usuario} />
       )}
     </div>
   );
@@ -6963,7 +6950,7 @@ function AppLogado({ usuario }) {
     medicina: <ViewMedicina />,
     social: <ViewSocial />,
     desempenho: <EmbedExterno url={URL_DASHBOARD_DESEMPENHO} titulo="Dashboard de Desempenho" />,
-    treinador: <PainelTreinador />,
+    treinador: <PainelTreinador usuario={usuario} />,
     usuarios: <PainelUsuarios usuarioAtual={usuario} />,
     relatorios: <CentralRelatorios usuario={usuario} />,
   };
