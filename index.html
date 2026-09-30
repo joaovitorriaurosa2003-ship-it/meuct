@@ -22,8 +22,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
@@ -573,40 +573,58 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 
 /* ---------- Central de Relatórios ---------- */
 .relatorio-filtros-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;}
-.relatorio-preview-wrap{overflow:auto; background:#e9edf2; padding:24px; border-radius:12px;}
-.relatorio-folha{background:#fff; color:#1a1a1a; width:794px; max-width:100%; margin:0 auto; padding:34px 38px; font-family:'Barlow', sans-serif;}
-.relatorio-cabecalho{display:flex; align-items:center; gap:14px; border-bottom:2px solid var(--navy); padding-bottom:10px; margin-bottom:14px;}
-.relatorio-cabecalho img{width:46px; height:46px; object-fit:contain;}
-.relatorio-cabecalho .depto{font-size:11.5px; font-weight:800; color:var(--navy); letter-spacing:0.4px; text-transform:uppercase;}
-.relatorio-cabecalho .clube{font-size:11px; color:var(--muted);}
-.relatorio-titulo{text-align:center; margin:4px 0 14px;}
-.relatorio-titulo h1{font-size:18.5px; font-weight:800; color:var(--navy); letter-spacing:0.2px; margin-bottom:2px;}
-.relatorio-titulo .subtitulo{font-size:12px; font-style:italic; color:var(--muted);}
-.relatorio-info-table{width:100%; border-collapse:collapse; margin-bottom:14px; font-size:12.5px;}
-.relatorio-info-table td{border:1px solid #999; padding:5px 10px;}
-.relatorio-info-table td:first-child{font-weight:700; background:#f2f2f2; width:190px;}
-.relatorio-secao-titulo{font-size:12.5px; font-weight:800; color:var(--navy); text-transform:uppercase; letter-spacing:0.3px; margin:16px 0 6px; border-bottom:1px solid var(--line-soft); padding-bottom:3px;}
-.relatorio-resumo-texto{font-size:12.5px; line-height:1.55; margin-bottom:4px;}
-.relatorio-atencao-box{border:1px solid var(--amarelo); background:var(--amarelo-bg); border-radius:6px; padding:9px 13px; margin-bottom:7px;}
-.relatorio-atencao-box .item-titulo{font-weight:700; color:var(--navy); font-size:12.5px; margin-bottom:2px;}
-.relatorio-atencao-box .item-corpo{font-size:11.8px; color:#333; line-height:1.45;}
-.relatorio-tabela{width:100%; border-collapse:collapse; font-size:11.3px; margin-bottom:8px;}
-.relatorio-tabela th, .relatorio-tabela td{border:1px solid #999; padding:6px 8px; text-align:left; vertical-align:top;}
-.relatorio-tabela th{background:var(--navy); color:#fff; font-size:10.8px; text-transform:uppercase; letter-spacing:0.2px;}
-.relatorio-tabela tr:nth-child(even) td{background:#f7f7f7;}
-.relatorio-resumo-lista{font-size:12px; margin-top:2px;}
-.relatorio-resumo-item{display:flex; align-items:center; gap:9px; border:1px solid #ddd; border-radius:4px; padding:6px 10px; margin-bottom:4px;}
-.relatorio-resumo-item .ponto{width:11px; height:11px; border-radius:50%; flex-shrink:0;}
-.relatorio-resumo-item .ponto.verde{background:var(--verde);}
-.relatorio-resumo-item .ponto.amarelo{background:var(--amarelo);}
-.relatorio-resumo-item .ponto.vermelho{background:var(--vermelho);}
-.relatorio-resumo-item b{color:var(--navy);}
-.relatorio-resumo-item .categoria-tag{color:var(--muted); font-size:11px;}
-.relatorio-grafico-box{margin:8px 0 18px; height:230px; position:relative;}
-.relatorio-assinatura{text-align:center; margin-top:30px; font-size:12px;}
-.relatorio-assinatura .linha{border-top:1px solid #999; width:270px; margin:0 auto 4px; padding-top:4px; font-weight:700; color:var(--navy);}
-.relatorio-assinatura .cargo{color:var(--muted); font-size:11.5px;}
-.relatorio-rodape{text-align:center; font-size:10px; color:var(--muted); margin-top:20px; border-top:1px solid #ddd; padding-top:8px;}
+/* Prévia da folha: espelha o PDF (padrão do relatório de referência). Cores fixas, independentes do tema do app. */
+.relatorio-preview-wrap{margin-top:20px; background:#dfe4ea; padding:24px; border-radius:14px; overflow:hidden;}
+.relatorio-preview-escala{width:794px; margin:0 auto;}
+.relatorio-folha{background:#fff; color:#000; width:794px; margin:0 auto; padding:40px 53px 34px; font-family:"Times New Roman", Times, "Liberation Serif", serif; font-size:13.3px; line-height:1.2; box-shadow:0 10px 30px rgba(15,25,45,0.18);}
+.relatorio-cabecalho{display:grid; grid-template-columns:1fr 1fr; align-items:end; margin-bottom:6px;}
+.relatorio-cab-escudo{display:flex; justify-content:center;}
+.relatorio-cab-escudo img{width:49px; height:49px; object-fit:contain;}
+.relatorio-cab-depto{text-align:right; border-bottom:1.6px solid #1B2A4A; padding-bottom:10px; font-size:13.3px; color:#2E7D4F;}
+.relatorio-cab-depto b{color:#1B2A4A;}
+.relatorio-cab-depto .sep{margin:0 8px;}
+.relatorio-titulo{text-align:center; margin:4px 0 12px;}
+.relatorio-titulo h1{font-family:inherit; font-size:20px; font-weight:700; color:#1B2A4A; letter-spacing:0; margin:0 0 4px;}
+.relatorio-titulo .subtitulo{font-size:14.6px; font-style:italic; color:#2E7D4F;}
+.relatorio-info-table{width:100%; border-collapse:collapse; margin-bottom:12px; font-size:12px;}
+.relatorio-info-table td{border:1px solid #000; padding:2px 7px; color:#000;}
+.relatorio-info-table td:first-child{font-weight:700; background:#E6F2EA; width:136px;}
+.relatorio-secao-titulo{display:flex; align-items:center; gap:6px; font-size:14.6px; font-weight:700; color:#1B2A4A; text-transform:uppercase; margin:12px 0 7px; border-bottom:1.1px solid #2E7D4F; padding-bottom:3px;}
+.relatorio-icone-atencao{width:15px; height:13px; flex-shrink:0; display:inline-block; vertical-align:-2px; margin-right:4px;}
+.relatorio-resumo-texto{font-size:13.3px; line-height:1.2;}
+.relatorio-atencao-box{border:1px solid #000; background:#FBEAE8; padding:8px 11px 9px; margin-bottom:10px;}
+.relatorio-atencao-item + .relatorio-atencao-item{margin-top:8px;}
+.relatorio-atencao-box .item-titulo{font-weight:700; color:#B03A2E; font-size:13.3px; margin-bottom:3px;}
+.relatorio-atencao-box .item-corpo{font-size:13.3px; color:#000;}
+.relatorio-tabela{width:100%; border-collapse:collapse; font-size:12px; margin-bottom:10px; min-width:0 !important;}
+.relatorio-folha table tbody tr:last-child td{border-bottom:1px solid #000;}
+.relatorio-tabela th, .relatorio-tabela td{border:1px solid #000; padding:4px 6px; text-align:left; vertical-align:middle; color:#000;}
+.relatorio-tabela th{background:#1B2A4A; color:#fff; font-weight:700; font-size:12px; text-transform:none; letter-spacing:0;}
+.relatorio-tabela .centro{text-align:center;}
+.relatorio-tabela tbody tr:nth-child(even) td{background:#F2F2F2;}
+.relatorio-tabela tbody tr.destaque td{background:#FBEAE8;}
+.relatorio-tabela td.enfase{color:#B03A2E; font-weight:700;}
+.relatorio-tabela td.vazio{text-align:center; color:#777; font-style:italic;}
+.relatorio-legenda{font-size:10px; font-style:italic; color:#737373; margin:-2px 0 4px;}
+.relatorio-legenda .ponto, .relatorio-resumo-tabela .ponto{display:inline-block; width:8px; height:8px; border-radius:50%; margin:0 3px 0 2px; vertical-align:0;}
+.relatorio-resumo-tabela{width:100%; border-collapse:collapse; font-size:10.7px; margin-bottom:10px; min-width:0 !important;}
+.relatorio-resumo-tabela td{border:1px solid #000; padding:1.5px 6px; color:#000; vertical-align:middle;}
+.relatorio-resumo-tabela td.col-ponto{width:34px; text-align:center;}
+.relatorio-resumo-tabela td.centro{text-align:center; width:60px;}
+.relatorio-resumo-tabela td:nth-child(2){width:215px;}
+.relatorio-resumo-tabela td.enfase{color:#B03A2E; font-weight:700;}
+.relatorio-resumo-tabela .ponto{width:11px; height:11px;}
+.relatorio-resumo-tabela tr.sinal-verde td{background:#EAF5EE;}
+.relatorio-resumo-tabela tr.sinal-amarelo td{background:#FFF6DA;}
+.relatorio-resumo-tabela tr.sinal-vermelho td{background:#FBEAE8;}
+.relatorio-folha .ponto.verde{background:#43A047;} .relatorio-folha .ponto.amarelo{background:#F2C230;} .relatorio-folha .ponto.vermelho{background:#D9463B;} .relatorio-folha .ponto.neutro{background:#9EA3AA;}
+.relatorio-grafico-box{margin:6px 0 14px; height:240px; position:relative;}
+.relatorio-assinatura{text-align:center; margin-top:16px; font-size:10px; line-height:1.35; color:#000;}
+.relatorio-assinatura .nome{font-weight:700;}
+.relatorio-rodape{text-align:center; font-size:10.7px; color:#737373; margin-top:26px;}
+.relatorio-rodape .barra{margin:0 8px;}
+.relatorio-rodape .num{font-size:13.3px; color:#000;}
+@media (max-width: 600px){ .relatorio-preview-wrap{padding:10px; border-radius:10px;} }
 </style>
 </head>
 <body>
@@ -1340,7 +1358,7 @@ Estrutura do sistema (fase atual: arquivo único, navegação interna pelas abas
 
 7. DESEMPENHO — estatísticas de jogo. Tem um importador de CSV de análise de jogo, que lê o arquivo no navegador e sobe os dados agregados por jogador automaticamente.
 
-8. TREINADORES — visão só-leitura, mostra apenas o sinal (semáforo) de cada atleta e quais áreas estão em atenção, sem nenhum dado clínico bruto.
+8. TREINADORES — painel da comissão técnica: elenco com o semáforo de cada atleta e, ao abrir um atleta, o mesmo perfil completo do Elenco, mostrando as áreas que o usuário tem permissão de ver (normalmente Desempenho).
 
 Em qualquer braço (Psicologia/Fisioterapia/Fisiologia/Medicina/Desempenho), pra lançar um novo registro: clica em "+ Novo registro", escolhe o atleta, data, tipo, escreve a observação e marca o sinal.
 
@@ -6094,11 +6112,14 @@ function dataNoPeriodo(dataIso, filtros) {
   return dataIso >= filtros.dataInicio && dataIso <= filtros.dataFim;
 }
 
+/** Cores de sinal usadas nos gráficos do relatório (mesma família de cores do padrão impresso). */
+const COR_SINAL_RELATORIO = { verde: "#2E7D4F", amarelo: "#D9A21B", vermelho: "#B03A2E", neutro: "#9AA3AE" };
+
 /** Config Chart.js pronta pra um gráfico simples de barra/doughnut (1 série), no padrão visual do relatório. */
 function chartConfigSimples(tipo, labels, dados, cores) {
   return {
     type: tipo,
-    data: { labels, datasets: [{ data: dados, backgroundColor: cores, borderColor: "#0A1F35", borderWidth: 1 }] },
+    data: { labels, datasets: [{ data: dados, backgroundColor: cores, borderColor: "#1B2A4A", borderWidth: 1 }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -6183,33 +6204,35 @@ function construirRelatorioMedicina(registros, atletas, filtros) {
   const pontosAtencao = linhas
     .filter(({ registro }) => registro.ponto_atencao)
     .map(({ atleta, registro }) => ({
-      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"})${registro.horario ? " — " + registro.horario : ""}`,
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "-"})${registro.horario ? " · " + registro.horario : ""}`,
       corpo: registro.nota_atencao || registro.conduta || registro.queixa_principal,
     }));
 
   const colunasDetalhe = ["Horário", "Atleta", "Categoria", "Queixa Principal", "Hipótese Diagnóstica", "Conduta / Encaminhamento"];
   const linhasDetalhe = linhas.map(({ atleta, registro }) => [
-    registro.horario || "—",
-    nomeExibicao(atleta) + (registro.ponto_atencao ? " ⚠" : ""),
-    atleta.categoria || "—",
-    registro.queixa_principal || "—",
-    registro.hipotese_diagnostica || "—",
-    registro.conduta || "—",
+    registro.horario || "-",
+    nomeExibicao(atleta),
+    atleta.categoria || "-",
+    registro.queixa_principal || "-",
+    registro.hipotese_diagnostica || "-",
+    registro.conduta || "-",
   ]);
+  const destaques = linhas.map(({ registro }) => !!registro.ponto_atencao);
 
   const resumoColorido = linhas.map(({ atleta, registro }) => ({
     sinal: sinalPorDesfecho(registro.desfecho),
     nome: nomeExibicao(atleta),
-    categoria: atleta.categoria || "—",
+    categoria: atleta.categoria || "-",
     texto: registro.conduta || labelDesfechoAtendimento(registro.desfecho),
+    destaque: !!registro.ponto_atencao,
   }));
 
   const graficos = total > 0 ? [{
     titulo: "Atendimentos por desfecho",
-    chartConfig: chartConfigSimples("bar", ["Liberado", "Restrição/orientação", "Afastado"], [porDesfecho.liberado, porDesfecho.restricao, porDesfecho.afastado], ["#4C8B63", "#B5883A", "#A6473C"]),
+    chartConfig: chartConfigSimples("bar", ["Liberado", "Restrição/orientação", "Afastado"], [porDesfecho.liberado, porDesfecho.restricao, porDesfecho.afastado], [COR_SINAL_RELATORIO.verde, COR_SINAL_RELATORIO.amarelo, COR_SINAL_RELATORIO.vermelho]),
   }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, destaques, colunaNome: 1, colunasEmDestaque: [1, 4], resumoColorido, graficos };
 }
 
 /** Relatório de Fisioterapia — agrupa por episódio de lesão (mesmo agrupamento do painel), restrito aos episódios com alguma movimentação no período. */
@@ -6231,45 +6254,48 @@ function construirRelatorioFisioterapia(registros, atletas, filtros) {
   const total = linhas.length;
   const ativos = linhas.filter(({ episodio }) => episodio.ativo).length;
   const reincidentes = linhas.filter(({ episodio }) => episodio.reincidente).length;
+  const emDestaque = ({ episodio }) => episodio.gravidade === "grave" || episodio.reincidente;
 
   const resumoTexto = total === 0
     ? "Nenhum episódio de lesão com atividade no período selecionado."
     : `${total} episódio${total === 1 ? "" : "s"} de lesão com atividade no período, sendo ${ativos} ainda ativo${ativos === 1 ? "" : "s"} e ${reincidentes} reincidente${reincidentes === 1 ? "" : "s"}.`;
 
   const pontosAtencao = linhas
-    .filter(({ episodio }) => episodio.gravidade === "grave" || episodio.reincidente)
+    .filter(emDestaque)
     .map(({ atleta, episodio }) => ({
-      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"}) — ${episodio.regiao}`,
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "-"}) · ${episodio.regiao}`,
       corpo: `${episodio.reincidente ? "Lesão reincidente. " : ""}Gravidade ${episodio.gravidade || "não informada"}, fase atual: ${labelFaseRtp(episodio.faseAtual)}.`,
     }));
 
   const colunasDetalhe = ["Atleta", "Categoria", "Região", "Gravidade", "Fase RTP", "Dias desde o início", "Reincidente", "Avaliador"];
   const linhasDetalhe = linhas.map(({ atleta, episodio }) => [
     nomeExibicao(atleta),
-    atleta.categoria || "—",
+    atleta.categoria || "-",
     episodio.regiao,
-    episodio.gravidade || "—",
+    episodio.gravidade || "-",
     labelFaseRtp(episodio.faseAtual),
     String(calcularDiasEntre(episodio.dataInicio) || 0),
     episodio.reincidente ? "Sim" : "Não",
-    (episodio.registros[0] && episodio.registros[0].avaliador) || "—",
+    (episodio.registros[0] && episodio.registros[0].avaliador) || "-",
   ]);
+  const destaques = linhas.map(emDestaque);
 
-  const resumoColorido = linhas.map(({ atleta, episodio }) => ({
-    sinal: episodio.faseAtual === "liberado" ? "verde" : episodio.gravidade === "grave" ? "vermelho" : "amarelo",
-    nome: nomeExibicao(atleta),
-    categoria: atleta.categoria || "—",
-    texto: `${episodio.regiao} — ${labelFaseRtp(episodio.faseAtual)}`,
+  const resumoColorido = linhas.map((l) => ({
+    sinal: l.episodio.faseAtual === "liberado" ? "verde" : l.episodio.gravidade === "grave" ? "vermelho" : "amarelo",
+    nome: nomeExibicao(l.atleta),
+    categoria: l.atleta.categoria || "-",
+    texto: `${l.episodio.regiao} · ${labelFaseRtp(l.episodio.faseAtual)}`,
+    destaque: emDestaque(l),
   }));
 
   const porRegiao = {};
   linhas.forEach(({ episodio }) => { porRegiao[episodio.regiao] = (porRegiao[episodio.regiao] || 0) + 1; });
   const graficos = total > 0 ? [{
     titulo: "Episódios por região",
-    chartConfig: chartConfigSimples("bar", Object.keys(porRegiao), Object.values(porRegiao), "#B8976A"),
+    chartConfig: chartConfigSimples("bar", Object.keys(porRegiao), Object.values(porRegiao), "#1B2A4A"),
   }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, destaques, colunaNome: 0, colunasEmDestaque: [0, 3], resumoColorido, graficos };
 }
 
 /** Relatório genérico (Fisiologia, Psicologia, Desempenho) — registros simples com campo "sinal" (verde/amarelo/vermelho). */
@@ -6291,39 +6317,41 @@ function construirRelatorioGenerico(registros, atletas, filtros, opts) {
   linhas.forEach(({ registro }) => { const s = registro.sinal || "neutro"; porSinal[s] = (porSinal[s] || 0) + 1; });
 
   const resumoTexto = total === 0
-    ? `Nenhum ${opts.itemSingular} registrado no período selecionado.`
-    : `${total} ${total === 1 ? opts.itemSingular : opts.itemPlural} no período. Sinais: ${porSinal.verde} regular(es), ${porSinal.amarelo} em atenção e ${porSinal.vermelho} prioritário(s).`;
+    ? (opts.textoVazio || "Nenhum registro no período selecionado.")
+    : `${total} ${total === 1 ? opts.itemSingular : opts.itemPlural} no período. Sinais: ${porSinal.verde} regular(es), ${porSinal.amarelo} em atenção, ${porSinal.vermelho} prioritário(s)${porSinal.neutro ? ` e ${porSinal.neutro} informativo(s)` : ""}.`;
 
   const pontosAtencao = linhas
     .filter(({ registro }) => registro.sinal === "vermelho")
     .map(({ atleta, registro }) => ({
-      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"}) — ${formatarData(registro.data)}`,
-      corpo: registro.nota || registro.tipo || "—",
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "-"}) · ${formatarData(registro.data)}`,
+      corpo: registro.nota || registro.tipo || "-",
     }));
 
   const colunasDetalhe = ["Data", "Atleta", "Categoria", "Tipo", "Observação", "Sinal"];
   const linhasDetalhe = linhas.map(({ atleta, registro }) => [
     formatarData(registro.data),
     nomeExibicao(atleta),
-    atleta.categoria || "—",
-    registro.tipo || "—",
-    registro.nota || "—",
+    atleta.categoria || "-",
+    registro.tipo || "-",
+    registro.nota || "-",
     registro.sinal === "verde" ? "Regular" : registro.sinal === "amarelo" ? "Atenção" : registro.sinal === "vermelho" ? "Prioridade" : "Informativo",
   ]);
+  const destaques = linhas.map(({ registro }) => registro.sinal === "vermelho");
 
   const resumoColorido = linhas.map(({ atleta, registro }) => ({
-    sinal: registro.sinal === "vermelho" ? "vermelho" : registro.sinal === "amarelo" ? "amarelo" : "verde",
+    sinal: ["verde", "amarelo", "vermelho"].includes(registro.sinal) ? registro.sinal : "neutro",
     nome: nomeExibicao(atleta),
-    categoria: atleta.categoria || "—",
-    texto: registro.tipo || "—",
+    categoria: atleta.categoria || "-",
+    texto: registro.tipo || "-",
+    destaque: registro.sinal === "vermelho",
   }));
 
   const graficos = total > 0 ? [{
     titulo: "Distribuição por sinal",
-    chartConfig: chartConfigSimples("doughnut", ["Regular", "Atenção", "Prioridade"], [porSinal.verde, porSinal.amarelo, porSinal.vermelho], ["#4C8B63", "#B5883A", "#A6473C"]),
+    chartConfig: chartConfigSimples("doughnut", ["Regular", "Atenção", "Prioridade", "Informativo"], [porSinal.verde, porSinal.amarelo, porSinal.vermelho, porSinal.neutro], [COR_SINAL_RELATORIO.verde, COR_SINAL_RELATORIO.amarelo, COR_SINAL_RELATORIO.vermelho, COR_SINAL_RELATORIO.neutro]),
   }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, destaques, colunaNome: 1, colunasEmDestaque: [1, 5], resumoColorido, graficos };
 }
 
 /** Relatório de Serviço Social — usa o campo statusPublico ("ativo"/"atencao") em vez de "sinal". */
@@ -6350,38 +6378,40 @@ function construirRelatorioSocial(registros, atletas, filtros) {
   const pontosAtencao = linhas
     .filter(({ registro }) => registro.statusPublico === "atencao")
     .map(({ atleta, registro }) => ({
-      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "—"}) — ${formatarData(registro.data)}`,
-      corpo: registro.detalhe || registro.tipo || "—",
+      titulo: `${nomeExibicao(atleta)} (${atleta.categoria || "-"}) · ${formatarData(registro.data)}`,
+      corpo: registro.detalhe || registro.tipo || "-",
     }));
 
   const colunasDetalhe = ["Data", "Atleta", "Categoria", "Tipo", "Status", "Detalhe"];
   const linhasDetalhe = linhas.map(({ atleta, registro }) => [
     formatarData(registro.data),
     nomeExibicao(atleta),
-    atleta.categoria || "—",
-    registro.tipo || "—",
+    atleta.categoria || "-",
+    registro.tipo || "-",
     registro.statusPublico === "atencao" ? "Em atenção" : "Ativo",
-    registro.detalhe || "—",
+    registro.detalhe || "-",
   ]);
+  const destaques = linhas.map(({ registro }) => registro.statusPublico === "atencao");
 
   const resumoColorido = linhas.map(({ atleta, registro }) => ({
     sinal: registro.statusPublico === "atencao" ? "amarelo" : "verde",
     nome: nomeExibicao(atleta),
-    categoria: atleta.categoria || "—",
-    texto: registro.tipo || "—",
+    categoria: atleta.categoria || "-",
+    texto: registro.tipo || "-",
+    destaque: registro.statusPublico === "atencao",
   }));
 
   const graficos = total > 0 ? [{
     titulo: "Acompanhamentos por status",
-    chartConfig: chartConfigSimples("doughnut", ["Ativo", "Em atenção"], [total - emAtencao, emAtencao], ["#4C8B63", "#B5883A"]),
+    chartConfig: chartConfigSimples("doughnut", ["Ativo", "Em atenção"], [total - emAtencao, emAtencao], [COR_SINAL_RELATORIO.verde, COR_SINAL_RELATORIO.amarelo]),
   }] : [];
 
-  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos };
+  return { total, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, destaques, colunaNome: 1, colunasEmDestaque: [1, 4], resumoColorido, graficos };
 }
 
 /** Relatório de Psicologia — quando filtrado por UM atleta específico, troca o gráfico genérico por um gráfico de evolução por construto (linha, uma série por instrumento) pra cada construto que esse atleta tem dado — a mesma visão de EvolucaoPsiAtleta, só que todas de uma vez, encaixadas no PDF. */
 function construirRelatorioPsicologia(registros, atletas, filtros) {
-  const base = construirRelatorioGenerico(registros, atletas, filtros, { itemSingular: "avaliação", itemPlural: "avaliações" });
+  const base = construirRelatorioGenerico(registros, atletas, filtros, { itemSingular: "avaliação", itemPlural: "avaliações", textoVazio: "Nenhuma avaliação registrada no período selecionado." });
   if (filtros.atletaId) {
     const graficosAtleta = construirGraficosPsicologiaAtleta(registros, filtros.atletaId);
     if (graficosAtleta.length > 0) return { ...base, graficos: graficosAtleta };
@@ -6389,65 +6419,163 @@ function construirRelatorioPsicologia(registros, atletas, filtros) {
   return base;
 }
 
-/** Configuração de cada módulo disponível na Central de Relatórios: rótulos, subcoleção de origem e função que monta o conteúdo. */
+const LEGENDA_SINAL_PADRAO = [["verde", "regular"], ["amarelo", "atenção"], ["vermelho", "prioridade"]];
+
+/** Configuração de cada módulo disponível na Central de Relatórios: rótulos do documento, subcoleção de origem e função que monta o conteúdo. */
 const CONFIG_RELATORIO_MODULO = {
   medicina: {
     label: "Medicina",
     subcol: "medicina",
-    titulo: "RELATÓRIO DE ATENDIMENTOS MÉDICOS",
-    subtituloDept: "Departamento Médico — Comunicação à Coordenação",
+    departamento: "Departamento Médico",
+    tituloDia: "RELATÓRIO DIÁRIO DE ATENDIMENTOS MÉDICOS",
+    tituloPeriodo: "RELATÓRIO DE ATENDIMENTOS MÉDICOS",
     totalLabel: "Total de Atendimentos",
+    secaoDetalhe: "Detalhamento dos atendimentos",
+    legenda: [["verde", "liberado"], ["amarelo", "restrição/orientação"], ["vermelho", "afastado"]],
+    cargoSugerido: "Médico Responsável",
+    colunasCentro: [0, 2],
+    larguras: { 0: 15, 1: 33, 2: 18 },
     statusOpcoes: DESFECHOS_ATENDIMENTO.map((d) => ({ id: d.id, label: d.label })),
     construir: construirRelatorioMedicina,
   },
   fisioterapia: {
     label: "Fisioterapia",
     subcol: "fisio",
-    titulo: "RELATÓRIO DE FISIOTERAPIA",
-    subtituloDept: "Fisioterapia — Comunicação à Coordenação",
-    totalLabel: "Episódios com atividade no período",
+    departamento: "Fisioterapia",
+    tituloDia: "RELATÓRIO DIÁRIO DE FISIOTERAPIA",
+    tituloPeriodo: "RELATÓRIO DE FISIOTERAPIA",
+    totalLabel: "Episódios com atividade",
+    secaoDetalhe: "Detalhamento dos episódios de lesão",
+    legenda: [["verde", "liberado"], ["amarelo", "em tratamento"], ["vermelho", "lesão grave"]],
+    cargoSugerido: "Fisioterapeuta Responsável",
+    colunasCentro: [1, 3, 5, 6],
+    larguras: { 0: 33, 1: 18, 5: 17, 6: 20 },
     statusOpcoes: [{ id: "ativo", label: "Ativo" }, { id: "liberado", label: "Liberado" }],
     construir: construirRelatorioFisioterapia,
   },
   fisiologia: {
     label: "Fisiologia",
-    subcol: "fisio",
-    titulo: "RELATÓRIO DE FISIOLOGIA",
-    subtituloDept: "Fisiologia — Comunicação à Coordenação",
+    subcol: "fisiologia",
+    departamento: "Fisiologia",
+    tituloDia: "RELATÓRIO DIÁRIO DE FISIOLOGIA",
+    tituloPeriodo: "RELATÓRIO DE FISIOLOGIA",
     totalLabel: "Total de registros",
+    secaoDetalhe: "Detalhamento dos registros",
+    legenda: LEGENDA_SINAL_PADRAO,
+    cargoSugerido: "Fisiologista Responsável",
+    colunasCentro: [0, 2, 5],
+    larguras: { 0: 19, 1: 33, 2: 18, 5: 20 },
     statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
     construir: (regs, atletas, filtros) => construirRelatorioGenerico(regs, atletas, filtros, { itemSingular: "registro", itemPlural: "registros" }),
   },
   psicologia: {
     label: "Psicologia",
     subcol: "psi",
-    titulo: "RELATÓRIO DE PSICOLOGIA",
-    subtituloDept: "Psicologia — Comunicação à Coordenação",
+    departamento: "Psicologia",
+    tituloDia: "RELATÓRIO DIÁRIO DE PSICOLOGIA",
+    tituloPeriodo: "RELATÓRIO DE PSICOLOGIA",
     totalLabel: "Total de avaliações",
+    secaoDetalhe: "Detalhamento das avaliações",
+    legenda: LEGENDA_SINAL_PADRAO,
+    cargoSugerido: "Psicólogo Responsável",
+    colunasCentro: [0, 2, 5],
+    larguras: { 0: 19, 1: 33, 2: 18, 5: 20 },
     statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
     construir: construirRelatorioPsicologia,
   },
   social: {
     label: "Serviço Social",
     subcol: "social",
-    titulo: "RELATÓRIO DE SERVIÇO SOCIAL",
-    subtituloDept: "Serviço Social — Comunicação à Coordenação",
+    departamento: "Serviço Social",
+    tituloDia: "RELATÓRIO DIÁRIO DE SERVIÇO SOCIAL",
+    tituloPeriodo: "RELATÓRIO DE SERVIÇO SOCIAL",
     totalLabel: "Total de acompanhamentos",
+    secaoDetalhe: "Detalhamento dos acompanhamentos",
+    legenda: [["verde", "ativo"], ["amarelo", "em atenção"]],
+    cargoSugerido: "Assistente Social Responsável",
+    colunasCentro: [0, 2, 4],
+    larguras: { 0: 19, 1: 33, 2: 18, 4: 20 },
     statusOpcoes: [{ id: "ativo", label: "Ativo" }, { id: "atencao", label: "Em atenção" }],
     construir: construirRelatorioSocial,
   },
   desempenho: {
     label: "Desempenho",
     subcol: "performance",
-    titulo: "RELATÓRIO DE DESEMPENHO",
-    subtituloDept: "Desempenho — Comunicação à Coordenação",
+    departamento: "Desempenho",
+    tituloDia: "RELATÓRIO DIÁRIO DE DESEMPENHO",
+    tituloPeriodo: "RELATÓRIO DE DESEMPENHO",
     totalLabel: "Total de registros",
+    secaoDetalhe: "Detalhamento dos registros",
+    legenda: LEGENDA_SINAL_PADRAO,
+    cargoSugerido: "Analista de Desempenho",
+    colunasCentro: [0, 2, 5],
+    larguras: { 0: 19, 1: 33, 2: 18, 5: 20 },
     statusOpcoes: [{ id: "verde", label: "Regular" }, { id: "amarelo", label: "Atenção" }, { id: "vermelho", label: "Prioridade" }],
     construir: (regs, atletas, filtros) => construirRelatorioGenerico(regs, atletas, filtros, { itemSingular: "registro", itemPlural: "registros" }),
   },
 };
 
-/** Gráfico embutido no relatório — desenhado num canvas Chart.js real, que o html2canvas captura junto do resto da folha na hora de gerar o PDF. */
+/** "2026-09-22" -> "22 / 09 / 2026" (formato da linha de local e data do padrão). */
+function dataAssinaturaRelatorio(dataIso) {
+  const [y, m, d] = (dataIso || hojeISO()).split("-");
+  return `${d} / ${m} / ${y}`;
+}
+
+/**
+ * Monta o documento do relatório (tudo que aparece na folha) num único objeto — a MESMA
+ * estrutura alimenta a prévia na tela e o PDF, então os dois nunca saem diferentes.
+ */
+function montarDocumentoRelatorio(config, conteudo, meta) {
+  const ehDia = meta.tipoPeriodo === "dia";
+  const info = [[ehDia ? "Data" : "Período", meta.periodoLabel]];
+  if (meta.atletaNome) info.push(["Atleta", meta.atletaNome]);
+  else if (meta.categoriaLabel) info.push(["Categoria", meta.categoriaLabel]);
+  info.push(["Destinatário", meta.destinatario || "-"]);
+  info.push([config.totalLabel, String(conteudo.total)]);
+  const temNeutro = (conteudo.resumoColorido || []).some((r) => r.sinal === "neutro");
+  return {
+    departamento: config.departamento,
+    clube: "EC Meia Noite SAF",
+    titulo: ehDia ? config.tituloDia : config.tituloPeriodo,
+    subtitulo: "Comunicação à Coordenação · Setor de Futebol",
+    info,
+    secaoResumo: ehDia ? "Resumo do dia" : "Resumo do período",
+    resumoTexto: conteudo.resumoTexto,
+    pontosAtencao: conteudo.pontosAtencao || [],
+    secaoDetalhe: config.secaoDetalhe,
+    colunas: conteudo.colunasDetalhe,
+    linhas: conteudo.linhasDetalhe,
+    destaques: conteudo.destaques || [],
+    colunaNome: conteudo.colunaNome,
+    colunasEmDestaque: conteudo.colunasEmDestaque || [],
+    colunasCentro: config.colunasCentro || [],
+    larguras: config.larguras || {},
+    secaoResumoPratico: ehDia ? "Resumo prático do dia" : "Resumo prático do período",
+    legenda: temNeutro ? [...config.legenda, ["neutro", "informativo"]] : config.legenda,
+    resumoPratico: conteudo.resumoColorido || [],
+    graficos: conteudo.graficos || [],
+    local: (meta.local || "").trim() || "Patrocínio Paulista",
+    dataAssinatura: dataAssinaturaRelatorio(hojeISO()),
+    responsavelNome: (meta.responsavelNome || "").trim(),
+    responsavelRegistro: (meta.responsavelRegistro || "").trim(),
+    cargoLinha: (meta.responsavelCargo || "").trim() ? `${meta.responsavelCargo.trim()} · EC Meia Noite SAF` : "EC Meia Noite SAF",
+    rodape: `${config.departamento} · EC Meia Noite SAF`,
+  };
+}
+
+/* ==================== Prévia na tela (mesmo desenho do PDF) ==================== */
+
+function IconeAtencaoRelatorio() {
+  return (
+    <svg className="relatorio-icone-atencao" viewBox="0 0 24 21" aria-hidden="true">
+      <path d="M12 1.2 23 20H1z" fill="#F2B800" stroke="#BF8A00" strokeWidth="1.2" strokeLinejoin="round" />
+      <rect x="10.9" y="7.2" width="2.2" height="7" rx="1" fill="#2A1F00" />
+      <circle cx="12" cy="17" r="1.25" fill="#2A1F00" />
+    </svg>
+  );
+}
+
+/** Gráfico embutido na prévia do relatório (no PDF ele é redesenhado em alta resolução). */
 function MiniChartRelatorio({ grafico }) {
   const { useRef, useEffect } = React;
   const canvasRef = useRef(null);
@@ -6464,117 +6592,593 @@ function MiniChartRelatorio({ grafico }) {
   return <div className="relatorio-grafico-box"><canvas ref={canvasRef}></canvas></div>;
 }
 
-/** Folha do relatório — layout fixo (cabeçalho com escudo, tabela de info, pontos de atenção, gráfico, tabela detalhada, resumo colorido, assinatura), igual pro PDF quanto pra tela. */
-function RelatorioModelo({ innerRef, titulo, subtitulo, periodoLabel, destinatario, totalLabel, totalValor, resumoTexto, pontosAtencao, colunasDetalhe, linhasDetalhe, resumoColorido, graficos, responsavelNome, responsavelRegistro, responsavelCargo }) {
+/** Folha do relatório na tela — espelha o PDF (cabeçalho com escudo, tabela de info, pontos de atenção, detalhamento, resumo prático, gráficos e assinatura). */
+function RelatorioModelo({ rel }) {
+  const centro = new Set(rel.colunasCentro);
+  const emDestaque = new Set(rel.colunasEmDestaque);
   return (
-    <div className="relatorio-folha" ref={innerRef}>
+    <div className="relatorio-folha">
       <div className="relatorio-cabecalho">
-        <img src={ESCUDO_MEIA_NOITE} alt="Escudo Meia Noite EC" />
-        <div>
-          <div className="depto">{subtitulo}</div>
-          <div className="clube">EC Meia Noite SAF</div>
+        <div className="relatorio-cab-escudo"><img src={ESCUDO_MEIA_NOITE} alt="Escudo Meia Noite EC" /></div>
+        <div className="relatorio-cab-depto">
+          <b>{rel.departamento.toLocaleUpperCase("pt-BR")}</b>
+          <span className="sep">·</span>
+          <span className="clube">{rel.clube}</span>
         </div>
       </div>
       <div className="relatorio-titulo">
-        <h1>{titulo}</h1>
-        <div className="subtitulo">{subtitulo}</div>
+        <h1>{rel.titulo}</h1>
+        <div className="subtitulo">{rel.subtitulo}</div>
       </div>
       <table className="relatorio-info-table">
         <tbody>
-          <tr><td>Período</td><td>{periodoLabel}</td></tr>
-          <tr><td>Destinatário</td><td>{destinatario}</td></tr>
-          <tr><td>{totalLabel}</td><td>{totalValor}</td></tr>
+          {rel.info.map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}
         </tbody>
       </table>
 
-      <div className="relatorio-secao-titulo">Resumo do período</div>
-      <div className="relatorio-resumo-texto">{resumoTexto}</div>
+      <div className="relatorio-secao-titulo">{rel.secaoResumo}</div>
+      <div className="relatorio-resumo-texto">{rel.resumoTexto}</div>
 
-      {pontosAtencao.length > 0 && (
+      {rel.pontosAtencao.length > 0 && (
         <React.Fragment>
-          <div className="relatorio-secao-titulo">⚠ Pontos de atenção</div>
-          {pontosAtencao.map((p, i) => (
-            <div className="relatorio-atencao-box" key={i}>
-              <div className="item-titulo">{p.titulo}</div>
-              <div className="item-corpo">{p.corpo}</div>
-            </div>
-          ))}
-        </React.Fragment>
-      )}
-
-      {(graficos || []).map((g, i) => (
-        <React.Fragment key={i}>
-          <div className="relatorio-secao-titulo">{g.titulo}</div>
-          <MiniChartRelatorio grafico={g} />
-        </React.Fragment>
-      ))}
-
-      <div className="relatorio-secao-titulo">Detalhamento</div>
-      <table className="relatorio-tabela">
-        <thead><tr>{colunasDetalhe.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
-        <tbody>
-          {linhasDetalhe.length === 0 ? (
-            <tr><td colSpan={colunasDetalhe.length} style={{ textAlign: "center", color: "#888" }}>Nenhum registro no período selecionado.</td></tr>
-          ) : linhasDetalhe.map((linha, i) => (
-            <tr key={i}>{linha.map((cel, j) => <td key={j}>{cel}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-
-      {resumoColorido.length > 0 && (
-        <React.Fragment>
-          <div className="relatorio-secao-titulo">Resumo prático — leitura rápida por atleta</div>
-          <div className="relatorio-resumo-lista">
-            {resumoColorido.map((r, i) => (
-              <div className="relatorio-resumo-item" key={i}>
-                <span className={"ponto " + r.sinal}></span>
-                <b>{r.nome}</b> <span className="categoria-tag">{r.categoria}</span>
-                <span style={{ marginLeft: "auto", color: "#444" }}>{r.texto}</span>
+          <div className="relatorio-secao-titulo"><IconeAtencaoRelatorio /> Pontos de atenção</div>
+          <div className="relatorio-atencao-box">
+            {rel.pontosAtencao.map((p, i) => (
+              <div className="relatorio-atencao-item" key={i}>
+                <div className="item-titulo">{p.titulo}</div>
+                <div className="item-corpo">{p.corpo}</div>
               </div>
             ))}
           </div>
         </React.Fragment>
       )}
 
+      <div className="relatorio-secao-titulo">{rel.secaoDetalhe}</div>
+      <table className="relatorio-tabela">
+        <thead><tr>{rel.colunas.map((c, i) => <th key={i} className={centro.has(i) ? "centro" : ""}>{c}</th>)}</tr></thead>
+        <tbody>
+          {rel.linhas.length === 0 ? (
+            <tr><td colSpan={rel.colunas.length} className="vazio">Nenhum registro no período selecionado.</td></tr>
+          ) : rel.linhas.map((linha, i) => (
+            <tr key={i} className={rel.destaques[i] ? "destaque" : ""}>
+              {linha.map((cel, j) => (
+                <td key={j} className={(centro.has(j) ? "centro " : "") + (rel.destaques[i] && emDestaque.has(j) ? "enfase" : "")}>
+                  {rel.destaques[i] && j === rel.colunaNome && <IconeAtencaoRelatorio />}
+                  {cel}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {rel.resumoPratico.length > 0 && (
+        <React.Fragment>
+          <div className="relatorio-secao-titulo">{rel.secaoResumoPratico}</div>
+          <div className="relatorio-legenda">
+            Leitura rápida por atleta:{" "}
+            {rel.legenda.map(([sinal, label], i) => (
+              <span key={sinal}>{i > 0 ? " · " : ""}<span className={"ponto " + sinal}></span>{label}</span>
+            ))}
+          </div>
+          <table className="relatorio-resumo-tabela">
+            <tbody>
+              {rel.resumoPratico.map((r, i) => (
+                <tr key={i} className={"sinal-" + r.sinal}>
+                  <td className="col-ponto"><span className={"ponto " + r.sinal}></span></td>
+                  <td className={r.destaque ? "enfase" : ""}>{r.nome}</td>
+                  <td className="centro">{r.categoria}</td>
+                  <td>{r.texto}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </React.Fragment>
+      )}
+
+      {rel.graficos.map((g, i) => (
+        <React.Fragment key={i}>
+          <div className="relatorio-secao-titulo">{g.titulo}</div>
+          <MiniChartRelatorio grafico={g} />
+        </React.Fragment>
+      ))}
+
       <div className="relatorio-assinatura">
-        <div className="linha">{responsavelNome || "—"}</div>
-        {responsavelRegistro && <div className="cargo">{responsavelRegistro}</div>}
-        <div className="cargo">{responsavelCargo || ""}</div>
+        <div>{rel.local}, {rel.dataAssinatura}</div>
+        <div className="nome">{rel.responsavelNome || " "}</div>
+        {rel.responsavelRegistro && <div>{rel.responsavelRegistro}</div>}
+        <div>{rel.cargoLinha}</div>
       </div>
-      <div className="relatorio-rodape">CT Integrado · Meia Noite EC · Gerado em {formatarData(hojeISO())}</div>
+      <div className="relatorio-rodape">{rel.rodape} <span className="barra">|</span> Página <span className="num">1</span></div>
     </div>
   );
 }
 
-/** Captura um elemento (a folha de relatório) via html2canvas e adiciona suas páginas a um doc jsPDF já existente.
- *  Use primeiraPagina=true quando for o primeiríssimo conteúdo do doc (reaproveita a página em branco inicial);
- *  caso contrário abre uma nova página antes de desenhar — é o que permite empilhar vários atletas num único PDF. */
-async function adicionarElementoAoPDF(pdfDoc, elemento, primeiraPagina) {
-  const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-  const imgData = canvas.toDataURL("image/png");
-  const pageWidth = pdfDoc.internal.pageSize.getWidth();
-  const pageHeight = pdfDoc.internal.pageSize.getHeight();
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-  let heightLeft = imgHeight;
-  let position = 0;
-  if (!primeiraPagina) pdfDoc.addPage();
-  pdfDoc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-  while (heightLeft > 0) {
-    position -= pageHeight;
-    pdfDoc.addPage();
-    pdfDoc.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+/** Mostra a folha A4 (794 px) inteira, reduzindo proporcionalmente em telas estreitas. Só afeta a prévia: o PDF é gerado à parte e sai sempre igual. */
+function PreviewRelatorio({ children }) {
+  const { useRef, useEffect, useState } = React;
+  const wrapRef = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    function medir() {
+      const cs = getComputedStyle(el);
+      const util = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      setZoom(Math.min(1, util / 794));
+    }
+    medir();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(medir) : null;
+    if (ro) ro.observe(el);
+    return () => { if (ro) ro.disconnect(); };
+  }, []);
+  return (
+    <div className="relatorio-preview-wrap" ref={wrapRef}>
+      <div className="relatorio-preview-escala" style={{ zoom }}>{children}</div>
+    </div>
+  );
+}
+
+/* ==================== PDF nativo, no padrão do relatório de referência ==================== */
+/* O PDF é desenhado de verdade (texto vetorial, página A4 fixa), em vez de fotografar a tela:
+   sai igual em qualquer aparelho, não corta linha de tabela na virada da página, repete o
+   cabeçalho da tabela, mantém margem em todas as páginas e numera as páginas no rodapé. */
+
+const PDF_COR = {
+  navy: [27, 42, 74],             // #1B2A4A — título, cabeçalho da tabela
+  verde: [46, 125, 79],           // #2E7D4F — subtítulo, filetes das seções
+  vermelho: [176, 58, 46],        // #B03A2E — nomes e dados em destaque
+  rosa: [251, 234, 232],          // #FBEAE8 — caixa e linhas de atenção
+  zebra: [242, 242, 242],
+  verdeClaro: [234, 245, 238],    // #EAF5EE
+  amareloClaro: [255, 246, 218],  // #FFF6DA
+  rotuloInfo: [230, 242, 234],    // #E6F2EA — rótulos da tabela de informações
+  cinza: [115, 115, 115],
+  preto: [0, 0, 0],
+  branco: [255, 255, 255],
+};
+const PDF_PONTO = { verde: [67, 160, 71], amarelo: [242, 194, 48], vermelho: [217, 70, 59], neutro: [158, 163, 170] };
+const PDF_FUNDO_SINAL = { verde: PDF_COR.verdeClaro, amarelo: PDF_COR.amareloClaro, vermelho: PDF_COR.rosa, neutro: PDF_COR.branco };
+const PDF_LAYOUT = { margemX: 14, topoContinuacao: 21, base: 17 };
+const PT_MM = 0.3528;
+const CP1252_EXTRA = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+
+/** Deixa o texto seguro pras fontes padrão do PDF (Times): mantém acentos e pontuação, tira emoji/símbolos que a fonte não desenha. */
+function textoPdf(v) {
+  if (v === null || v === undefined) return "";
+  let s = "";
+  for (const ch of String(v)) {
+    const c = ch.codePointAt(0);
+    if (ch === "\n" || (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) || CP1252_EXTRA.includes(ch)) s += ch;
+    else if (ch === "\t") s += " ";
+    else if (ch === "→") s += "->";
+  }
+  return s.replace(/ {2,}/g, " ").trim();
+}
+
+function novoDocPdf() {
+  const { jsPDF } = window.jspdf;
+  return new jsPDF({ unit: "mm", format: "a4", compress: true });
+}
+
+function pdfIconeAtencao(doc, x, y, tamanho) {
+  const h = tamanho, w = tamanho * 1.12;
+  doc.setLineWidth(0.15);
+  doc.setDrawColor(191, 138, 0);
+  doc.setFillColor(242, 184, 0);
+  doc.triangle(x, y + h, x + w / 2, y, x + w, y + h, "FD");
+  doc.setFillColor(42, 31, 0);
+  doc.rect(x + w / 2 - tamanho * 0.055, y + h * 0.33, tamanho * 0.11, h * 0.36, "F");
+  doc.circle(x + w / 2, y + h * 0.82, tamanho * 0.065, "F");
+}
+
+function pdfGarantirEspaco(ctx, altura) {
+  if (ctx.y + altura > ctx.H - PDF_LAYOUT.base) {
+    ctx.doc.addPage();
+    ctx.y = PDF_LAYOUT.topoContinuacao;
   }
 }
 
-/** Renderiza o elemento em canvas (html2canvas) e monta um PDF A4 paginado (jsPDF), disparando o download direto. */
-async function baixarRelatorioPDF(elemento, nomeArquivo) {
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({ unit: "mm", format: "a4" });
-  await adicionarElementoAoPDF(pdf, elemento, true);
-  pdf.save(nomeArquivo);
+/** "DEPARTAMENTO MÉDICO · EC Meia Noite SAF", alinhado à direita (negrito azul + verde). */
+function pdfLinhaDepartamento(doc, rel, xDireita, yBase, tamanho) {
+  const dep = textoPdf(rel.departamento).toLocaleUpperCase("pt-BR");
+  const sep = "  ·  ";
+  const clube = textoPdf(rel.clube);
+  doc.setFontSize(tamanho);
+  doc.setFont("times", "bold");
+  const w1 = doc.getTextWidth(dep);
+  doc.setFont("times", "normal");
+  const w2 = doc.getTextWidth(sep);
+  const w3 = doc.getTextWidth(clube);
+  let x = xDireita - (w1 + w2 + w3);
+  doc.setFont("times", "bold");
+  doc.setTextColor(...PDF_COR.navy);
+  doc.text(dep, x, yBase);
+  x += w1;
+  doc.setFont("times", "normal");
+  doc.setTextColor(...PDF_COR.verde);
+  doc.text(sep, x, yBase);
+  doc.text(clube, x + w2, yBase);
+  return w1 + w2 + w3;
+}
+
+function pdfCabecalho(ctx, rel) {
+  const { doc } = ctx;
+  const largura = ctx.x1 - ctx.x0;
+  try { doc.addImage(ESCUDO_MEIA_NOITE, "PNG", ctx.x0 + largura * 0.25 - 6.5, 11, 13, 13, "escudo-meia-noite", "FAST"); } catch (e) { /* segue sem o escudo */ }
+  pdfLinhaDepartamento(doc, rel, ctx.x1, 19.6, 10);
+  doc.setDrawColor(...PDF_COR.navy);
+  doc.setLineWidth(0.45);
+  doc.line(ctx.x0 + largura * 0.5, 23.4, ctx.x1, 23.4);
+  const cx = (ctx.x0 + ctx.x1) / 2;
+  doc.setFont("times", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(...PDF_COR.navy);
+  let y = 30;
+  doc.splitTextToSize(textoPdf(rel.titulo), largura).forEach((ln) => { doc.text(ln, cx, y, { align: "center" }); y += 6.2; });
+  doc.setFont("times", "italic");
+  doc.setFontSize(11);
+  doc.setTextColor(...PDF_COR.verde);
+  doc.text(textoPdf(rel.subtitulo), cx, y - 0.6, { align: "center" });
+  ctx.y = y + 2.6;
+}
+
+function pdfCabecalhoContinuacao(ctx, rel) {
+  const { doc } = ctx;
+  const largura = ctx.x1 - ctx.x0;
+  const larguraDep = pdfLinhaDepartamento(doc, rel, ctx.x1, 12.6, 8.5);
+  doc.setDrawColor(...PDF_COR.navy);
+  doc.setLineWidth(0.35);
+  doc.line(ctx.x0 + largura * 0.5, 15.2, ctx.x1, 15.2);
+  try { doc.addImage(ESCUDO_MEIA_NOITE, "PNG", ctx.x0, 7.6, 8, 8, "escudo-meia-noite", "FAST"); } catch (e) { /* segue sem o escudo */ }
+  doc.setFont("times", "italic");
+  doc.setFontSize(8);
+  doc.setTextColor(...PDF_COR.cinza);
+  const espaco = largura - larguraDep - 14;
+  let titulo = textoPdf(rel.titulo);
+  while (titulo.length > 8 && doc.getTextWidth(titulo) > espaco) titulo = titulo.slice(0, -2);
+  if (titulo !== textoPdf(rel.titulo)) titulo = titulo.trim() + "…";
+  doc.text(titulo, ctx.x0 + 10, 12.6);
+}
+
+function pdfRodape(ctx, rel, numero, total) {
+  const { doc } = ctx;
+  const cx = (ctx.x0 + ctx.x1) / 2;
+  const y = ctx.H - 9.5;
+  const parte1 = textoPdf(rel.rodape) + "   |   Página ";
+  const parte2 = String(numero);
+  const parte3 = total > 1 ? ` de ${total}` : "";
+  doc.setFont("times", "normal");
+  doc.setFontSize(8);
+  const w1 = doc.getTextWidth(parte1);
+  const w3 = doc.getTextWidth(parte3);
+  doc.setFontSize(10);
+  const w2 = doc.getTextWidth(parte2);
+  let x = cx - (w1 + w2 + w3) / 2;
+  doc.setFontSize(8);
+  doc.setTextColor(...PDF_COR.cinza);
+  doc.text(parte1, x, y);
+  x += w1;
+  doc.setFontSize(10);
+  doc.setTextColor(...PDF_COR.preto);
+  doc.text(parte2, x, y);
+  x += w2;
+  if (parte3) {
+    doc.setFontSize(8);
+    doc.setTextColor(...PDF_COR.cinza);
+    doc.text(parte3, x, y);
+  }
+}
+
+function pdfSecao(ctx, titulo, opcoes) {
+  const { doc } = ctx;
+  const o = opcoes || {};
+  pdfGarantirEspaco(ctx, 8 + (o.reservar || 0));
+  let x = ctx.x0;
+  if (o.icone) { pdfIconeAtencao(doc, x, ctx.y + 0.7, 3.5); x += 5.3; }
+  doc.setFont("times", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...PDF_COR.navy);
+  doc.text(textoPdf(titulo).toLocaleUpperCase("pt-BR"), x, ctx.y + 3.9);
+  doc.setDrawColor(...PDF_COR.verde);
+  doc.setLineWidth(0.3);
+  doc.line(ctx.x0, ctx.y + 5.4, ctx.x1, ctx.y + 5.4);
+  ctx.y += 6.8;
+}
+
+function pdfParagrafo(ctx, texto) {
+  const { doc } = ctx;
+  const tam = 10;
+  const lh = tam * 1.2 * PT_MM;
+  doc.setFont("times", "normal");
+  doc.setFontSize(tam);
+  doc.setTextColor(...PDF_COR.preto);
+  doc.splitTextToSize(textoPdf(texto), ctx.x1 - ctx.x0).forEach((ln) => {
+    pdfGarantirEspaco(ctx, lh + 0.5);
+    doc.text(ln, ctx.x0, ctx.y + tam * 0.8 * PT_MM);
+    ctx.y += lh;
+  });
+}
+
+function pdfMargensTabela(ctx) {
+  return { left: ctx.x0, right: ctx.W - ctx.x1, top: PDF_LAYOUT.topoContinuacao, bottom: PDF_LAYOUT.base };
+}
+
+function pdfTabelaInfo(ctx, rel) {
+  const { doc } = ctx;
+  doc.autoTable({
+    startY: ctx.y,
+    margin: pdfMargensTabela(ctx),
+    body: rel.info.map(([k, v]) => [textoPdf(k), textoPdf(v)]),
+    theme: "grid",
+    styles: { font: "times", fontSize: 9, textColor: PDF_COR.preto, lineColor: PDF_COR.preto, lineWidth: 0.25, cellPadding: { top: 0.75, bottom: 0.75, left: 1.8, right: 1.8 }, valign: "middle" },
+    bodyStyles: { fillColor: PDF_COR.branco },
+    columnStyles: { 0: { cellWidth: 36, fontStyle: "bold", fillColor: PDF_COR.rotuloInfo } },
+    rowPageBreak: "avoid",
+  });
+  ctx.y = doc.lastAutoTable.finalY + 3.4;
+}
+
+/** Caixa rosa com os pontos de atenção. Se não couber tudo na página, fecha a caixa e continua na próxima. */
+function pdfCaixaAtencao(ctx, itens) {
+  const { doc } = ctx;
+  const largura = ctx.x1 - ctx.x0;
+  const padX = 2.8, padY = 2.1, tam = 10, lh = tam * 1.2 * PT_MM;
+  let inicioSegmento = null;
+  function fecharSegmento() {
+    if (inicioSegmento === null) return;
+    doc.setDrawColor(...PDF_COR.preto);
+    doc.setLineWidth(0.25);
+    doc.rect(ctx.x0, inicioSegmento, largura, ctx.y - inicioSegmento, "S");
+    inicioSegmento = null;
+  }
+  itens.forEach((it, i) => {
+    doc.setFontSize(tam);
+    doc.setFont("times", "bold");
+    const tituloLinhas = doc.splitTextToSize(textoPdf(it.titulo), largura - 2 * padX);
+    doc.setFont("times", "normal");
+    const corpoLinhas = it.corpo ? doc.splitTextToSize(textoPdf(it.corpo), largura - 2 * padX) : [];
+    const ultimo = i === itens.length - 1;
+    const h = padY + tituloLinhas.length * lh + 0.9 + corpoLinhas.length * lh + (ultimo ? padY : 1.2);
+    if (ctx.y + h > ctx.H - PDF_LAYOUT.base) {
+      fecharSegmento();
+      doc.addPage();
+      ctx.y = PDF_LAYOUT.topoContinuacao;
+    }
+    if (inicioSegmento === null) inicioSegmento = ctx.y;
+    doc.setFillColor(...PDF_COR.rosa);
+    doc.rect(ctx.x0, ctx.y, largura, h, "F");
+    let yy = ctx.y + padY;
+    doc.setFont("times", "bold");
+    doc.setTextColor(...PDF_COR.vermelho);
+    tituloLinhas.forEach((ln) => { doc.text(ln, ctx.x0 + padX, yy + tam * 0.8 * PT_MM); yy += lh; });
+    yy += 0.9;
+    doc.setFont("times", "normal");
+    doc.setTextColor(...PDF_COR.preto);
+    corpoLinhas.forEach((ln) => { doc.text(ln, ctx.x0 + padX, yy + tam * 0.8 * PT_MM); yy += lh; });
+    ctx.y += h;
+  });
+  fecharSegmento();
+  ctx.y += 3.2;
+}
+
+function pdfTabelaDetalhe(ctx, rel) {
+  const { doc } = ctx;
+  const centro = new Set(rel.colunasCentro);
+  const emDestaque = new Set(rel.colunasEmDestaque);
+  const vazio = rel.linhas.length === 0;
+  const padrao = { top: 1.1, bottom: 1.1, left: 1.6, right: 1.6 };
+  const columnStyles = {};
+  rel.colunas.forEach((_, i) => {
+    columnStyles[i] = {};
+    if (centro.has(i)) columnStyles[i].halign = "center";
+    if (rel.larguras[i]) columnStyles[i].cellWidth = rel.larguras[i];
+  });
+  doc.autoTable({
+    startY: ctx.y,
+    margin: pdfMargensTabela(ctx),
+    head: [rel.colunas.map(textoPdf)],
+    body: vazio
+      ? [[{ content: "Nenhum registro no período selecionado.", colSpan: rel.colunas.length, styles: { halign: "center", textColor: PDF_COR.cinza, fontStyle: "italic" } }]]
+      : rel.linhas.map((linha) => linha.map(textoPdf)),
+    theme: "grid",
+    styles: { font: "times", fontSize: 9, textColor: PDF_COR.preto, lineColor: PDF_COR.preto, lineWidth: 0.2, cellPadding: padrao, valign: "middle", overflow: "linebreak" },
+    headStyles: { fillColor: PDF_COR.navy, textColor: PDF_COR.branco, fontStyle: "bold", valign: "middle" },
+    bodyStyles: { fillColor: PDF_COR.branco },
+    alternateRowStyles: { fillColor: PDF_COR.zebra },
+    columnStyles,
+    rowPageBreak: "avoid",
+    showHead: "everyPage",
+    didParseCell(data) {
+      if (data.section === "head") {
+        if (centro.has(data.column.index)) data.cell.styles.halign = "center";
+        return;
+      }
+      if (data.section !== "body" || vazio || !rel.destaques[data.row.index]) return;
+      data.cell.styles.fillColor = PDF_COR.rosa;
+      if (emDestaque.has(data.column.index)) {
+        data.cell.styles.textColor = PDF_COR.vermelho;
+        data.cell.styles.fontStyle = "bold";
+      }
+      if (data.column.index === rel.colunaNome) data.cell.styles.cellPadding = { ...padrao, left: 6.2 };
+    },
+    didDrawCell(data) {
+      if (data.section !== "body" || vazio || !rel.destaques[data.row.index] || data.column.index !== rel.colunaNome) return;
+      const t = 3.1;
+      pdfIconeAtencao(doc, data.cell.x + 1.5, data.cell.y + data.cell.height / 2 - t / 2 - 0.15, t);
+    },
+  });
+  ctx.y = doc.lastAutoTable.finalY + 4;
+}
+
+function pdfResumoPratico(ctx, rel) {
+  const { doc } = ctx;
+  pdfSecao(ctx, rel.secaoResumoPratico, { reservar: 12 });
+  doc.setFont("times", "italic");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...PDF_COR.cinza);
+  let x = ctx.x0;
+  const yb = ctx.y + 2.3;
+  function escrever(t) { doc.text(t, x, yb); x += doc.getTextWidth(t); }
+  escrever("Leitura rápida por atleta: ");
+  rel.legenda.forEach(([sinal, label], i) => {
+    if (i > 0) escrever(" · ");
+    doc.setFillColor(...PDF_PONTO[sinal]);
+    doc.circle(x + 1.1, yb - 0.85, 0.95, "F");
+    x += 2.7;
+    escrever(label);
+  });
+  ctx.y += 3.9;
+  doc.autoTable({
+    startY: ctx.y,
+    margin: pdfMargensTabela(ctx),
+    body: rel.resumoPratico.map((r) => ["", textoPdf(r.nome), textoPdf(r.categoria), textoPdf(r.texto)]),
+    theme: "grid",
+    styles: { font: "times", fontSize: 8, textColor: PDF_COR.preto, lineColor: PDF_COR.preto, lineWidth: 0.2, cellPadding: { top: 0.7, bottom: 0.7, left: 1.6, right: 1.6 }, valign: "middle", overflow: "linebreak" },
+    bodyStyles: { fillColor: PDF_COR.branco },
+    columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 57 }, 2: { cellWidth: 16, halign: "center" } },
+    rowPageBreak: "avoid",
+    didParseCell(data) {
+      const r = rel.resumoPratico[data.row.index];
+      if (!r) return;
+      data.cell.styles.fillColor = PDF_FUNDO_SINAL[r.sinal] || PDF_COR.branco;
+      if (data.column.index === 1 && r.destaque) {
+        data.cell.styles.textColor = PDF_COR.vermelho;
+        data.cell.styles.fontStyle = "bold";
+      }
+    },
+    didDrawCell(data) {
+      if (data.section !== "body" || data.column.index !== 0) return;
+      const r = rel.resumoPratico[data.row.index];
+      if (!r) return;
+      const cor = PDF_PONTO[r.sinal] || PDF_PONTO.neutro;
+      doc.setFillColor(...cor);
+      doc.setDrawColor(Math.round(cor[0] * 0.75), Math.round(cor[1] * 0.75), Math.round(cor[2] * 0.75));
+      doc.setLineWidth(0.15);
+      doc.circle(data.cell.x + data.cell.width / 2, data.cell.y + data.cell.height / 2, 1.5, "FD");
+    },
+  });
+  ctx.y = doc.lastAutoTable.finalY + 4;
+}
+
+/** Desenha um gráfico Chart.js num canvas fora da tela, em alta resolução e fundo branco, e devolve a imagem pro PDF. */
+function graficoParaImagem(chartConfig, largura, altura) {
+  const canvas = document.createElement("canvas");
+  canvas.width = largura;
+  canvas.height = altura;
+  const opcoes = chartConfig.options || {};
+  const pluginsOpc = opcoes.plugins || {};
+  const ehRosca = chartConfig.type === "doughnut" || chartConfig.type === "pie";
+  const config = {
+    type: chartConfig.type,
+    data: JSON.parse(JSON.stringify(chartConfig.data)),
+    options: {
+      ...opcoes,
+      responsive: false,
+      maintainAspectRatio: false,
+      animation: false,
+      devicePixelRatio: 2,
+      plugins: { ...pluginsOpc, legend: { ...(pluginsOpc.legend || {}), ...(ehRosca ? { display: true, position: "right" } : {}) } },
+    },
+    plugins: [{
+      id: "fundoBrancoPdf",
+      beforeDraw(chart) {
+        const c = chart.ctx;
+        c.save();
+        c.fillStyle = "#ffffff";
+        c.fillRect(0, 0, chart.width, chart.height);
+        c.restore();
+      },
+    }],
+  };
+  const fonteAnterior = Chart.defaults.font.family;
+  const corAnterior = Chart.defaults.color;
+  Chart.defaults.font.family = "'Times New Roman', Times, serif";
+  Chart.defaults.color = "#333333";
+  try {
+    const chart = new Chart(canvas, config);
+    // JPEG entra no PDF sem ser recodificado (bem mais rápido que PNG em lote) e o fundo já é branco
+    const url = canvas.toDataURL("image/jpeg", 0.92);
+    chart.destroy();
+    return url;
+  } finally {
+    Chart.defaults.font.family = fonteAnterior;
+    Chart.defaults.color = corAnterior;
+  }
+}
+
+function pdfGrafico(ctx, grafico) {
+  const largura = ctx.x1 - ctx.x0;
+  const pxL = 760, pxA = 250;
+  const altura = largura * pxA / pxL;
+  pdfSecao(ctx, grafico.titulo, { reservar: altura + 2 });
+  let img = null;
+  try { img = graficoParaImagem(grafico.chartConfig, pxL, pxA); } catch (e) { img = null; }
+  if (img) ctx.doc.addImage(img, "JPEG", ctx.x0, ctx.y, largura, altura);
+  ctx.y += altura + 3;
+}
+
+function pdfAssinatura(ctx, rel) {
+  const { doc } = ctx;
+  pdfGarantirEspaco(ctx, 20);
+  const cx = (ctx.x0 + ctx.x1) / 2;
+  let y = ctx.y + 2.4;
+  doc.setFontSize(7.5);
+  doc.setTextColor(...PDF_COR.preto);
+  doc.setFont("times", "normal");
+  doc.text(textoPdf(`${rel.local}, ${rel.dataAssinatura}`), cx, y, { align: "center" });
+  y += 3.5;
+  if (rel.responsavelNome) {
+    doc.setFont("times", "bold");
+    doc.text(textoPdf(rel.responsavelNome), cx, y, { align: "center" });
+    y += 3.1;
+  }
+  doc.setFont("times", "normal");
+  if (rel.responsavelRegistro) { doc.text(textoPdf(rel.responsavelRegistro), cx, y, { align: "center" }); y += 3.1; }
+  doc.text(textoPdf(rel.cargoLinha), cx, y, { align: "center" });
+  ctx.y = y + 3;
+}
+
+/** Desenha um relatório completo no doc. Se não for o primeiro conteúdo do doc, começa em página nova
+ *  (é o que permite juntar vários atletas num PDF só); a numeração "Página N de M" é por relatório. */
+function desenharRelatorioPdf(doc, rel, primeiroDoDocumento) {
+  if (!primeiroDoDocumento) doc.addPage();
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const ctx = { doc, W, H, x0: PDF_LAYOUT.margemX, x1: W - PDF_LAYOUT.margemX, y: 0 };
+  const paginaInicial = doc.getNumberOfPages();
+
+  pdfCabecalho(ctx, rel);
+  pdfTabelaInfo(ctx, rel);
+  pdfSecao(ctx, rel.secaoResumo, { reservar: 8 });
+  pdfParagrafo(ctx, rel.resumoTexto);
+  ctx.y += 2.6;
+  if (rel.pontosAtencao.length > 0) {
+    pdfSecao(ctx, "Pontos de atenção", { icone: true, reservar: 14 });
+    pdfCaixaAtencao(ctx, rel.pontosAtencao);
+  }
+  pdfSecao(ctx, rel.secaoDetalhe, { reservar: 16 });
+  pdfTabelaDetalhe(ctx, rel);
+  if (rel.resumoPratico.length > 0) pdfResumoPratico(ctx, rel);
+  rel.graficos.forEach((g) => pdfGrafico(ctx, g));
+  pdfAssinatura(ctx, rel);
+
+  const paginaFinal = doc.getNumberOfPages();
+  const total = paginaFinal - paginaInicial + 1;
+  for (let p = paginaInicial; p <= paginaFinal; p++) {
+    doc.setPage(p);
+    if (p > paginaInicial) pdfCabecalhoContinuacao(ctx, rel);
+    pdfRodape(ctx, rel, p - paginaInicial + 1, total);
+  }
+  doc.setPage(paginaFinal);
+}
+
+/** Gera o PDF de um relatório e dispara o download direto. */
+function baixarRelatorioPDF(rel, nomeArquivo) {
+  const doc = novoDocPdf();
+  doc.setProperties({ title: textoPdf(rel.titulo), subject: textoPdf(rel.rodape), author: textoPdf(rel.responsavelNome || "CT Integrado"), creator: "CT Integrado · Meia Noite EC" });
+  desenharRelatorioPdf(doc, rel, true);
+  doc.save(nomeArquivo);
 }
 
 /** Deixa um texto seguro pra usar em nome de arquivo: sem acento, sem espaço/caractere especial. */
@@ -6630,24 +7234,22 @@ function CentralRelatorios({ usuario }) {
   const [responsavelNome, setResponsavelNome] = useState(usuario.nome || usuario.email || "");
   const [responsavelRegistro, setResponsavelRegistro] = useState("");
   const [responsavelCargo, setResponsavelCargo] = useState("");
+  const [local, setLocal] = useState("Patrocínio Paulista");
   const [atletas, setAtletas] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState(null);
   const [conteudo, setConteudo] = useState(null);
   const [baixando, setBaixando] = useState(false);
-  const folhaRef = useRef(null);
 
   // ---- Modo grupo ----
   const [grupoIds, setGrupoIds] = useState([]); // ids dos atletas marcados pro grupo
   const [gerandoGrupo, setGerandoGrupo] = useState(null); // null | "zip" | "combinado"
   const [progressoGrupo, setProgressoGrupo] = useState(null); // { atual, total, nome }
-  const [conteudoGrupoAtual, setConteudoGrupoAtual] = useState(null); // { atletaId, conteudo } — sendo capturado agora
-  const folhaGrupoRef = useRef(null);
 
   const config = CONFIG_RELATORIO_MODULO[moduloId];
 
   useEffect(() => {
-    carregarAtletas().then(setAtletas).catch((e) => setErro(e.message));
+    carregarAtletas().then(setAtletas).catch((e) => setErro("Não consegui carregar os dados: " + e.message));
   }, []);
 
   useEffect(() => { setStatus(""); setConteudo(null); setGrupoIds([]); }, [moduloId]);
@@ -6666,18 +7268,38 @@ function CentralRelatorios({ usuario }) {
       const filtros = { tipoPeriodo, dataDia, dataInicio, dataFim, atletaId, categoria, status };
       setConteudo(config.construir(registros, listaAtletas, filtros));
     } catch (e) {
-      setErro(e.message);
+      setErro("Não consegui carregar os dados: " + e.message);
     } finally {
       setCarregando(false);
     }
   }
 
+  const periodoLabel = tipoPeriodo === "dia" ? formatarData(dataDia) : `${formatarData(dataInicio)} a ${formatarData(dataFim)}`;
+  const categoriaLabel = categoria === "sub15" ? "Sub-15" : categoria === "sub17" ? "Sub-17" : "";
+
+  /** Tudo que vai no cabeçalho/assinatura do documento (o conteúdo vem do módulo). */
+  function metaDocumento(idAtleta) {
+    const atleta = idAtleta ? (atletas || []).find((a) => a.id === idAtleta) : null;
+    return {
+      tipoPeriodo, periodoLabel, destinatario, local,
+      atletaNome: atleta ? `${nomeExibicao(atleta)}${atleta.categoria ? " (" + atleta.categoria + ")" : ""}` : "",
+      categoriaLabel,
+      responsavelNome, responsavelRegistro, responsavelCargo,
+    };
+  }
+
+  const documento = conteudo && config ? montarDocumentoRelatorio(config, conteudo, metaDocumento(atletaId)) : null;
+
   async function baixar() {
-    if (!folhaRef.current) return;
+    if (!documento) return;
     setBaixando(true);
+    setErro(null);
     try {
-      const sujeito = atletaId ? nomeAtleta(atletas, atletaId) : (categoria ? categoria : "Todos");
-      await baixarRelatorioPDF(folhaRef.current, nomeArquivoRelatorio(config.label, sujeito));
+      await new Promise((res) => setTimeout(res, 30)); // deixa o botão mostrar "Preparando PDF..."
+      const sujeito = atletaId ? nomeAtleta(atletas, atletaId) : (categoriaLabel || "Todos");
+      baixarRelatorioPDF(documento, nomeArquivoRelatorio(config.label, sujeito));
+    } catch (e) {
+      setErro("Não foi possível gerar o PDF: " + (e && e.message ? e.message : e));
     } finally {
       setBaixando(false);
     }
@@ -6699,13 +7321,13 @@ function CentralRelatorios({ usuario }) {
       const comDados = atletasComDadosNoPeriodo(registros, candidatos, filtros);
       setGrupoIds(comDados.map((a) => a.id));
     } catch (e) {
-      setErro(e.message);
+      setErro("Não consegui carregar os dados: " + e.message);
     } finally {
       setCarregando(false);
     }
   }
 
-  /** Gera os relatórios de todos os atletas do grupo, um de cada vez (renderizados fora da tela),
+  /** Gera os relatórios de todos os atletas do grupo, um de cada vez (direto no PDF, sem depender da tela),
    *  e junta o resultado num .zip (um PDF por atleta) ou num único PDF combinado. */
   async function processarGrupo(saida) {
     if (!config || grupoIds.length === 0) return;
@@ -6715,34 +7337,33 @@ function CentralRelatorios({ usuario }) {
       if (!atletas) setAtletas(listaAtletas);
       const registros = await carregarTodosRegistros(config.subcol);
       const filtrosBase = { tipoPeriodo, dataDia, dataInicio, dataFim, categoria, status };
-      const { jsPDF } = window.jspdf;
       const zip = saida === "zip" ? new JSZip() : null;
-      const pdfCombinado = saida === "combinado" ? new jsPDF({ unit: "mm", format: "a4" }) : null;
+      const pdfCombinado = saida === "combinado" ? novoDocPdf() : null;
 
       for (let i = 0; i < grupoIds.length; i++) {
         const idAtual = grupoIds[i];
         const nomeAtual = nomeAtleta(listaAtletas, idAtual);
         setProgressoGrupo({ atual: i + 1, total: grupoIds.length, nome: nomeAtual });
+        await new Promise((res) => setTimeout(res, 0)); // deixa a tela atualizar o progresso
 
         const filtros = { ...filtrosBase, atletaId: idAtual };
         const conteudoAtleta = config.construir(registros, listaAtletas, filtros);
-        setConteudoGrupoAtual({ atletaId: idAtual, conteudo: conteudoAtleta });
+        const atleta = listaAtletas.find((a) => a.id === idAtual);
+        const docAtleta = montarDocumentoRelatorio(config, conteudoAtleta, {
+          ...metaDocumento(null),
+          atletaNome: atleta ? `${nomeExibicao(atleta)}${atleta.categoria ? " (" + atleta.categoria + ")" : ""}` : nomeAtual,
+        });
 
-        // espera o React montar a folha oculta e o Chart.js desenhar os gráficos nela antes de capturar
-        await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 250))));
-        if (!folhaGrupoRef.current) continue;
-
-        const nomeArq = nomeArquivoRelatorio(config.label, nomeAtual);
         if (saida === "zip") {
-          const pdfIndividual = new jsPDF({ unit: "mm", format: "a4" });
-          await adicionarElementoAoPDF(pdfIndividual, folhaGrupoRef.current, true);
-          zip.file(nomeArq, pdfIndividual.output("blob"));
+          const pdfIndividual = novoDocPdf();
+          desenharRelatorioPdf(pdfIndividual, docAtleta, true);
+          zip.file(nomeArquivoRelatorio(config.label, nomeAtual), pdfIndividual.output("blob"));
         } else {
-          await adicionarElementoAoPDF(pdfCombinado, folhaGrupoRef.current, i === 0);
+          desenharRelatorioPdf(pdfCombinado, docAtleta, i === 0);
         }
       }
 
-      const sujeitoGrupo = categoria || "Todos";
+      const sujeitoGrupo = categoriaLabel || "Todos";
       if (saida === "zip") {
         const blob = await zip.generateAsync({ type: "blob" });
         baixarBlob(blob, `${fatiaArquivo(config.label)}_Grupo-${fatiaArquivo(sujeitoGrupo)}_${dataArquivo(hojeISO())}.zip`);
@@ -6750,15 +7371,12 @@ function CentralRelatorios({ usuario }) {
         pdfCombinado.save(`${fatiaArquivo(config.label)}_Grupo-${fatiaArquivo(sujeitoGrupo)}_${dataArquivo(hojeISO())}.pdf`);
       }
     } catch (e) {
-      setErro(e.message);
+      setErro("Não foi possível gerar os PDFs do grupo: " + (e && e.message ? e.message : e));
     } finally {
       setGerandoGrupo(null);
       setProgressoGrupo(null);
-      setConteudoGrupoAtual(null);
     }
   }
-
-  const periodoLabel = tipoPeriodo === "dia" ? formatarData(dataDia) : `${formatarData(dataInicio)} – ${formatarData(dataFim)}`;
 
   return (
     <div className="page">
@@ -6771,7 +7389,7 @@ function CentralRelatorios({ usuario }) {
 
       {erro && (
         <div className="access-note" style={{ background: "var(--vermelho-bg)", borderColor: "var(--vermelho)" }}>
-          <span><b>Não consegui carregar os dados:</b> {erro}</span>
+          <span>{erro}</span>
         </div>
       )}
 
@@ -6839,7 +7457,8 @@ function CentralRelatorios({ usuario }) {
               <div className="relatorio-filtros-grid" style={{ marginTop: 0 }}>
                 <div className="field"><label>Responsável pelo relatório</label><input type="text" value={responsavelNome} onChange={e => setResponsavelNome(e.target.value)} /></div>
                 <div className="field"><label>Registro profissional</label><input type="text" placeholder="Ex.: CRM-SP 12345" value={responsavelRegistro} onChange={e => setResponsavelRegistro(e.target.value)} /></div>
-                <div className="field"><label>Cargo</label><input type="text" placeholder="Ex.: Médico Responsável" value={responsavelCargo} onChange={e => setResponsavelCargo(e.target.value)} /></div>
+                <div className="field"><label>Cargo</label><input type="text" placeholder={"Ex.: " + (config ? config.cargoSugerido : "Responsável")} value={responsavelCargo} onChange={e => setResponsavelCargo(e.target.value)} /></div>
+                <div className="field"><label>Local (linha da assinatura)</label><input type="text" value={local} onChange={e => setLocal(e.target.value)} /></div>
               </div>
 
               {modo === "individual" ? (
@@ -6886,50 +7505,10 @@ function CentralRelatorios({ usuario }) {
             </div>
           </div>
 
-          {modo === "individual" && conteudo && config && (
-            <div className="relatorio-preview-wrap" style={{ marginTop: 20 }}>
-              <RelatorioModelo
-                innerRef={folhaRef}
-                titulo={config.titulo}
-                subtitulo={config.subtituloDept}
-                periodoLabel={periodoLabel}
-                destinatario={destinatario}
-                totalLabel={config.totalLabel}
-                totalValor={conteudo.total}
-                resumoTexto={conteudo.resumoTexto}
-                pontosAtencao={conteudo.pontosAtencao}
-                colunasDetalhe={conteudo.colunasDetalhe}
-                linhasDetalhe={conteudo.linhasDetalhe}
-                resumoColorido={conteudo.resumoColorido}
-                graficos={conteudo.graficos}
-                responsavelNome={responsavelNome}
-                responsavelRegistro={responsavelRegistro}
-                responsavelCargo={responsavelCargo}
-              />
-            </div>
-          )}
-
-          {conteudoGrupoAtual && config && (
-            <div style={{ position: "absolute", left: "-10000px", top: 0 }}>
-              <RelatorioModelo
-                innerRef={folhaGrupoRef}
-                titulo={config.titulo}
-                subtitulo={config.subtituloDept}
-                periodoLabel={periodoLabel}
-                destinatario={destinatario}
-                totalLabel={config.totalLabel}
-                totalValor={conteudoGrupoAtual.conteudo.total}
-                resumoTexto={conteudoGrupoAtual.conteudo.resumoTexto}
-                pontosAtencao={conteudoGrupoAtual.conteudo.pontosAtencao}
-                colunasDetalhe={conteudoGrupoAtual.conteudo.colunasDetalhe}
-                linhasDetalhe={conteudoGrupoAtual.conteudo.linhasDetalhe}
-                resumoColorido={conteudoGrupoAtual.conteudo.resumoColorido}
-                graficos={conteudoGrupoAtual.conteudo.graficos}
-                responsavelNome={responsavelNome}
-                responsavelRegistro={responsavelRegistro}
-                responsavelCargo={responsavelCargo}
-              />
-            </div>
+          {modo === "individual" && documento && (
+            <PreviewRelatorio>
+              <RelatorioModelo rel={documento} />
+            </PreviewRelatorio>
           )}
         </React.Fragment>
       )}
