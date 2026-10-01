@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Serviço Social — CT Integrado</title>
+<title>Serviço Social · MeuCT</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
@@ -243,7 +243,7 @@ tbody tr.clickable:hover{background:rgba(10,31,53,0.02);}
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
 /**
- * CAMADA DE DADOS — Firebase (Firestore) do CT Integrado
+ * CAMADA DE DADOS — Firebase (Firestore) do MeuCT
  * ---------------------------------------------------------
  * Roda no projeto meurh-23fad, sob coleções prefixadas com "ct_"
  * para não colidir com os dados de RH que já vivem no mesmo projeto.
@@ -393,7 +393,7 @@ function HubBar({ current }) {
         "div",
         { className: "hubbar-brand" },
         React.createElement(BrandMark, null),
-        React.createElement("span", { className: "k" }, "K&G · CT Integrado")
+        React.createElement("span", { className: "k" }, "K&G · MeuCT")
       ),
       React.createElement(
         "div",
@@ -425,7 +425,7 @@ function HubBar({ current }) {
   );
 }
 
-const SYSTEM_PROMPT_CT = `Você é o assistente de ajuda do CT Integrado, um sistema interno do Meia Noite Esporte Clube (Sub-15/Sub-17), da marca Kaluf & Gomes.
+const SYSTEM_PROMPT_CT = `Você é o assistente de ajuda do MeuCT (antes chamado CT Integrado), um sistema interno do Meia Noite Esporte Clube (Sub-15/Sub-17), da marca Kaluf & Gomes.
 
 Sua função é ajudar o usuário (hoje, só o Administrador/CEO) a entender COMO USAR o sistema — não responder sobre dados clínicos de nenhum atleta específico, já que você não tem acesso a esses dados.
 
@@ -451,7 +451,7 @@ function ChatWidget() {
   const { useState, useRef, useEffect } = React;
   const [aberto, setAberto] = useState(false);
   const [mensagens, setMensagens] = useState([
-    { role: "assistant", content: "Oi! Posso ajudar a entender como usar o CT Integrado — onde lançar um registro, o que é o semáforo, como navegar entre os hubs. O que você quer saber?" },
+    { role: "assistant", content: "Oi! Posso ajudar a entender como usar o MeuCT: onde lançar um registro, o que é o semáforo, como navegar entre os hubs. O que você quer saber?" },
   ]);
   const [input, setInput] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -515,7 +515,7 @@ function ChatWidget() {
         <div className="chat-panel">
           <div className="chat-head">
             <div>
-              <div className="title">Assistente do CT Integrado</div>
+              <div className="title">Assistente do MeuCT</div>
               <div className="sub">Dúvidas de uso do sistema</div>
             </div>
             <button onClick={() => setAberto(false)} aria-label="Fechar">×</button>
@@ -649,7 +649,7 @@ function App() {
         <div className="page-head">
           <div>
             <h1>Serviço Social</h1>
-            <div className="crumb">CT Integrado · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
           </div>
         </div>
 

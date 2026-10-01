@@ -1,7 +1,7 @@
 {
-  "name": "CT Integrado - Meia Noite EC",
-  "short_name": "CT Integrado",
-  "description": "Plataforma de gestao multidisciplinar de atletas do Meia Noite Esporte Clube",
+  "name": "MeuCT · Meia Noite EC",
+  "short_name": "MeuCT",
+  "description": "Plataforma de gestão multidisciplinar de atletas do Meia Noite Esporte Clube",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
