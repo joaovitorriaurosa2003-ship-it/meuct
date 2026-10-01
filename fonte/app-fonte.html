@@ -22,10 +22,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <style>
 /* =====================================================================
    MeuCT · Meia Noite EC · design system "Refletor da Meia-Noite"
@@ -1122,6 +1118,36 @@ tr.linha-qr td{background:var(--surface-2);}
   .pse-select{min-width:150px;}
 }
 
+/* ---------- Painel geral (início) ---------- */
+.inicio-grid{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:20px; align-items:start;}
+.inicio-coluna{display:flex; flex-direction:column; min-width:0;}
+.inicio-coluna > .panel{margin-bottom:20px;}
+.inicio-vazio{padding:18px 20px; color:var(--muted); font-size:13.5px;}
+.inicio-lista{display:flex; flex-direction:column;}
+.inicio-jogo{display:flex; gap:16px; align-items:center; padding:18px 20px;}
+.inicio-jogo-info{display:flex; flex-direction:column; gap:4px; min-width:0;}
+.inicio-jogo-info b{font-family:var(--font-display); font-size:22px; line-height:1.1; color:var(--ink);}
+.inicio-jogo-info span{font-size:13px; color:var(--muted);}
+.inicio-jogo-info .inicio-jogo-conv{align-self:flex-start; margin-top:4px; font-size:12px; font-weight:800; padding:3px 10px; border-radius:999px; background:var(--verde-bg); color:var(--pitch-800);}
+.inicio-jogo-info .inicio-jogo-conv.pendente{background:var(--amarelo-bg); color:#8A5A00;}
+.inicio-evento, .inicio-atleta, .inicio-novidade{display:flex; gap:14px; align-items:center; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid var(--line-soft); padding:12px 20px; font:inherit; color:inherit; cursor:pointer;}
+.inicio-evento:hover, .inicio-atleta:hover, .inicio-novidade:hover{background:rgba(14,23,38,0.03);}
+.inicio-lista > button:last-child{border-bottom:none;}
+.inicio-evento{border-left:4px solid var(--evento-cor, var(--line-soft));}
+.inicio-evento-dia{display:flex; flex-direction:column; min-width:74px; font-size:12.5px; font-weight:800; color:var(--ink);}
+.inicio-evento-dia small{font-weight:600; color:var(--muted);}
+.inicio-evento-texto{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.inicio-evento-texto b{font-size:14px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.inicio-evento-texto small{font-size:12px; color:var(--muted);}
+.inicio-avatar{width:38px; height:38px; border-radius:50%; flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--mn-900); color:#fff; font-size:12px; font-weight:800; box-shadow:0 0 0 3px rgba(208,59,59,0.25);}
+.inicio-avatar img{width:100%; height:100%; object-fit:cover;}
+.inicio-novidade{flex-direction:column; align-items:flex-start; gap:3px;}
+.inicio-novidade small{font-size:11.5px; color:var(--muted);}
+.inicio-novidade b{font-size:14px; color:var(--ink);}
+.inicio-novidade span{font-size:13px; color:var(--muted); line-height:1.45;}
+.inicio-mais{align-self:flex-start; margin:8px 20px 12px;}
+@media (max-width: 980px){ .inicio-grid{grid-template-columns:minmax(0,1fr);} }
+
 /* ---------- Central de Relatórios ---------- */
 .relatorio-filtros-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px;}
 /* Prévia da folha: espelha o PDF (padrão do relatório de referência). Cores fixas, independentes do tema do app. */
@@ -1212,9 +1238,111 @@ const storage = firebase.storage();
  *  inexistente, dá 404 no preflight e ele insiste pra sempre sem nunca rejeitar a
  *  Promise). Isso trava a UI em "Enviando 0/N" pra sempre sem gerar nenhum erro.
  *  Essa função força uma desistência depois de `timeoutMs` com uma mensagem útil. */
-function subirComTimeout(ref, arquivo, timeoutMs) {
+/* ---------- Bibliotecas sob demanda ----------
+   PDF, ZIP e QR code só são usados em algumas telas. Em vez de todo mundo baixar e
+   processar essas bibliotecas ao abrir o app, elas carregam na primeira vez que alguém
+   precisa delas (e ficam guardadas pelo navegador depois). */
+const BIBLIOTECAS = {
+  pdf: [
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js",
+  ],
+  zip: ["https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"],
+  qr: ["https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"],
+};
+const bibliotecasCarregando = {};
+
+function carregarScriptExterno(url) {
   return new Promise((resolve, reject) => {
-    const task = ref.put(arquivo);
+    const s = document.createElement("script");
+    s.src = url;
+    s.async = false;
+    s.onload = resolve;
+    s.onerror = () => { s.remove(); reject(new Error("Não consegui carregar um componente do app. Confira a internet e tente de novo.")); };
+    document.head.appendChild(s);
+  });
+}
+
+/** Garante que a biblioteca ("pdf", "zip" ou "qr") está pronta. Pode chamar quantas vezes quiser. */
+function carregarBiblioteca(nome) {
+  if (!bibliotecasCarregando[nome]) {
+    bibliotecasCarregando[nome] = BIBLIOTECAS[nome]
+      .reduce((p, url) => p.then(() => carregarScriptExterno(url)), Promise.resolve())
+      .catch((e) => { delete bibliotecasCarregando[nome]; throw e; });
+  }
+  return bibliotecasCarregando[nome];
+}
+
+/** Hook: começa a baixar as bibliotecas assim que a tela abre, para estarem prontas no clique. */
+function useBibliotecas(...nomes) {
+  const [prontas, setProntas] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    Promise.all(nomes.map(carregarBiblioteca)).then(() => { if (vivo) setProntas(true); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  return prontas;
+}
+
+/* ---------- Fotos dos atletas ----------
+   Fotos tiradas no celular têm 2 a 3 MB, mas aparecem em tamanho de avatar. Antes de enviar,
+   a foto é reduzida para no máximo 480 px no lado menor (cerca de 40 KB), girada do jeito
+   certo e salva em JPG com cache longo, então o app baixa quase nada para mostrar o elenco. */
+const FOTO_LADO = 480;
+
+async function lerImagemArquivo(arquivo) {
+  if (window.createImageBitmap) {
+    try { return await createImageBitmap(arquivo, { imageOrientation: "from-image" }); } catch (e) {}
+  }
+  const url = URL.createObjectURL(arquivo);
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Não consegui ler essa imagem. Envie a foto em JPG ou PNG."));
+      img.src = url;
+    });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+async function reduzirFoto(arquivo, lado = FOTO_LADO, qualidade = 0.82) {
+  const img = await lerImagemArquivo(arquivo);
+  const w = img.width || img.naturalWidth;
+  const h = img.height || img.naturalHeight;
+  if (!w || !h) throw new Error("Não consegui ler essa imagem. Envie a foto em JPG ou PNG.");
+  const escala = Math.min(1, lado / Math.min(w, h));
+  const cw = Math.max(1, Math.round(w * escala));
+  const ch = Math.max(1, Math.round(h * escala));
+  const canvas = document.createElement("canvas");
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, cw, ch);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, cw, ch);
+  if (img.close) img.close();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", qualidade));
+  if (!blob) throw new Error("Não consegui preparar a foto para envio.");
+  return blob;
+}
+
+/** Reduz a foto, envia para o Storage com nome novo (para nenhum navegador mostrar a antiga
+ *  guardada no cache) e grava o endereço no cadastro do atleta. A foto antiga continua no Storage. */
+async function enviarFotoAtleta(atletaId, arquivo) {
+  const blob = await reduzirFoto(arquivo);
+  const ref = storage.ref().child(`fotos_atletas/${atletaId}_${Date.now()}.jpg`);
+  await subirComTimeout(ref, blob, 30000, { contentType: "image/jpeg", cacheControl: "public, max-age=31536000" });
+  const url = await ref.getDownloadURL();
+  await db.collection(COL_ATLETAS).doc(atletaId).update({ foto: url });
+  return url;
+}
+
+function subirComTimeout(ref, arquivo, timeoutMs, metadados) {
+  return new Promise((resolve, reject) => {
+    const task = metadados ? ref.put(arquivo, metadados) : ref.put(arquivo);
     const timer = setTimeout(() => {
       try { task.cancel(); } catch (e) {}
       reject(new Error("Tempo esgotado enviando a foto. O mais provável é que o Storage do Firebase ainda não foi criado nesse projeto. Confirme em Firebase Console → Storage → \"Get started\"."));
@@ -3023,7 +3151,7 @@ function ElencoPorPosicao({ atletasComSinal, onOpenAtleta, modoInicial }) {
     return (
       <button key={d.id} type="button" className={"jogador" + (verDisp && d.disp && d.disp.status === "fora" ? " fora" : "")} onClick={() => onOpenAtleta(d.id)} title={dica} aria-label={dica}>
         <span className="jogador-foto">
-          {d.foto ? <img src={d.foto} alt="" /> : iniciaisAtleta(d)}
+          {d.foto ? <img loading="lazy" decoding="async" src={d.foto} alt="" /> : iniciaisAtleta(d)}
           <span className={"jogador-sinal " + sinalDe(d)}></span>
         </span>
         <span className="jogador-nome">{nomeCurtoAtleta(d)}</span>
@@ -3082,7 +3210,7 @@ function ElencoPorPosicao({ atletasComSinal, onOpenAtleta, modoInicial }) {
               <div className="pitch-banco-lista">
                 {banco.map((d) => (
                   <button key={d.id} type="button" className="banco-jogador" onClick={() => onOpenAtleta(d.id)} title={d.nome}>
-                    <span className="mini">{d.foto ? <img src={d.foto} alt="" /> : iniciaisAtleta(d)}</span>
+                    <span className="mini">{d.foto ? <img loading="lazy" decoding="async" src={d.foto} alt="" /> : iniciaisAtleta(d)}</span>
                     {nomeCurtoAtleta(d)}
                     <span className={"ponto " + sinalDe(d)}></span>
                   </button>
@@ -3135,7 +3263,7 @@ function ViewElenco({ usuario }) {
       <div className="page-head">
         <div>
           <h1>{atletaAberto ? "Perfil do atleta" : "Elenco"}</h1>
-          <div className="crumb">MeuCT · Meia Noite EC · você vê o que sua área tem permissão de ver</div>
+          <div className="crumb">MeuCT · Meia Noite EC</div>
         </div>
       </div>
 
@@ -3154,95 +3282,131 @@ function ViewElenco({ usuario }) {
   );
 }
 
-function Dashboard({ dados, onOpenAtleta }) {
-  const linha = atletasComSinais(dados);
+/** Painel geral: só o essencial do dia a dia. Semáforo do elenco, próximo jogo,
+ *  compromissos da semana, pendências, atletas em prioridade e últimas novidades. */
+function Dashboard({ dados, usuario, onOpenAtleta, onNavigate }) {
+  const hoje = hojeISO();
+  const [eventos, setEventos] = useState(null);
+  const [novidades, setNovidades] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    carregarEventos().then((l) => { if (vivo) setEventos(l); }).catch(() => { if (vivo) setEventos([]); });
+    lerComCache("atualizacoes:4", () => carregarAtualizacoes(4))
+      .then((l) => { if (vivo) setNovidades(l); })
+      .catch(() => { if (vivo) setNovidades([]); });
+    return () => { vivo = false; };
+  }, []);
+
+  const linha = atletasComSinais(dados, usuario);
   const contagem = { verde: 0, amarelo: 0, vermelho: 0 };
-  linha.forEach(d => contagem[d.risco]++);
+  linha.forEach((d) => contagem[d.risco]++);
+  const prioridade = linha.filter((d) => d.risco === "vermelho").sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
 
-  const AREAS = [
-    { chave: "psiData", label: "Psicologia" },
-    { chave: "fisioData", label: "Fisioterapia" },
-    { chave: "medicinaData", label: "Medicina" },
-    { chave: "socialData", label: "Serviço Social" },
-    { chave: "perfData", label: "Desempenho" },
-  ];
+  const ate = isoMaisDias(hoje, 7);
+  const proximoJogo = (eventos || []).find((e) => e.tipo === "jogo" && e.data >= hoje);
+  const semana = (eventos || []).filter((e) => e.data >= hoje && e.data <= ate);
+  const lembretes = eventos ? calcularLembretes(dados, usuario, eventos, hoje) : [];
+  const ir = (pagina) => onNavigate && onNavigate(pagina);
 
-  // total de registros por área
-  const totalPorArea = AREAS.map(a =>
-    Object.values(dados[a.chave]).reduce((soma, lista) => soma + lista.length, 0)
-  );
+  function abrirLembrete(l) {
+    if (l.eventoId) convocacaoPendente = l.eventoId;
+    ir(l.pagina);
+  }
 
-  // distribuição de sinal por área (verde / amarelo / vermelho / neutro)
-  const niveisSinal = ["verde", "amarelo", "vermelho", "neutro"];
-  const datasetsSinal = niveisSinal.map(nivel => ({
-    label: nivel === "verde" ? "Regular" : nivel === "amarelo" ? "Atenção" : nivel === "vermelho" ? "Prioridade" : "Informativo",
-    backgroundColor: COR_SINAL_UI[nivel],
-    borderColor: "#FFFFFF",
-    borderWidth: 2,
-    borderRadius: 0,
-    maxBarThickness: 48,
-    data: AREAS.map(a => {
-      let contador = 0;
-      Object.values(dados[a.chave]).forEach(lista => lista.forEach(r => {
-        const s = a.chave === "socialData" ? (r.statusPublico === "atencao" ? "amarelo" : "verde") : (r.sinal || "neutro");
-        if (s === nivel) contador++;
-      }));
-      return contador;
-    }),
-  }));
+  const convocados = proximoJogo && proximoJogo.convocacao
+    ? (proximoJogo.convocacao.titulares || []).length + (proximoJogo.convocacao.reservas || []).length
+    : 0;
 
   return (
     <div>
       <div className="kpi-row">
-        <div className="kpi-card"><div className="label">Atletas monitorados</div><div className="value">{dados.atletas.length}</div></div>
+        <div className="kpi-card"><div className="label">Atletas</div><div className="value">{dados.atletas.length}</div></div>
         <div className="kpi-card acento-verde"><div className="label">Sem alerta</div><div className="value verde">{contagem.verde}</div></div>
         <div className="kpi-card acento-amarelo"><div className="label">Atenção</div><div className="value amarelo">{contagem.amarelo}</div></div>
         <div className="kpi-card acento-vermelho"><div className="label">Prioridade</div><div className="value vermelho">{contagem.vermelho}</div></div>
       </div>
 
-      <div className="access-note admin">
-        <span><b>Modo Administrador:</b> acesso completo, conectado ao banco real (Firestore). Use o menu lateral para entrar em qualquer área quando quiser.</span>
-      </div>
+      <div className="inicio-grid">
+        <div className="inicio-coluna">
+          <div className="panel">
+            <div className="panel-head"><h3>Próximo jogo</h3><button type="button" className="pill-btn" onClick={() => ir("jogos")}>Jogos</button></div>
+            {!eventos ? (
+              <div className="inicio-vazio">Carregando...</div>
+            ) : !proximoJogo ? (
+              <div className="inicio-vazio">Nenhum jogo marcado.</div>
+            ) : (
+              <div className="inicio-jogo">
+                <span className="proximo-data"><b>{Number(proximoJogo.data.slice(8))}</b>{diaSemanaCurto(proximoJogo.data)}</span>
+                <div className="inicio-jogo-info">
+                  <b>{tituloEvento(proximoJogo)}</b>
+                  <span>{[dataCurta(proximoJogo.data) + (proximoJogo.hora ? " às " + proximoJogo.hora : ""), labelCategoriaEvento(proximoJogo.categoria), proximoJogo.mando === "fora" ? "Fora de casa" : "Em casa", proximoJogo.local, proximoJogo.competicao].filter(Boolean).join(" · ")}</span>
+                  <span className={"inicio-jogo-conv" + (convocados ? "" : " pendente")}>{convocados ? convocados + " convocados" : "Convocação pendente"}</span>
+                </div>
+              </div>
+            )}
+          </div>
 
-      <div className="panel">
-        <div className="panel-head"><h3>Comparativo entre áreas</h3></div>
-        <div className="charts-row">
-          <GraficoComparativo
-            titulo="Registros por área"
-            labels={AREAS.map(a => a.label)}
-            datasets={[{ label: "Registros", backgroundColor: COR_SERIE, data: totalPorArea, maxBarThickness: 48 }]}
-          />
-          <GraficoComparativo
-            titulo="Distribuição de sinal por área"
-            labels={AREAS.map(a => a.label)}
-            datasets={datasetsSinal}
-            empilhado
-          />
+          <div className="panel">
+            <div className="panel-head"><h3>Próximos 7 dias</h3><button type="button" className="pill-btn" onClick={() => ir("agenda")}>Agenda</button></div>
+            {!eventos ? (
+              <div className="inicio-vazio">Carregando...</div>
+            ) : semana.length === 0 ? (
+              <div className="inicio-vazio">Nada marcado para os próximos dias.</div>
+            ) : (
+              <div className="inicio-lista">
+                {semana.slice(0, 8).map((e) => (
+                  <button type="button" key={e.id} className={"inicio-evento tipo-" + e.tipo} onClick={() => ir(e.tipo === "jogo" ? "jogos" : "agenda")}>
+                    <span className="inicio-evento-dia">{e.data === hoje ? "Hoje" : diaSemanaCurto(e.data) + " " + dataCurta(e.data)}<small>{e.hora || ""}</small></span>
+                    <span className="inicio-evento-texto"><b>{tituloEvento(e)}</b><small>{[labelTipoEvento(e.tipo), labelCategoriaEvento(e.categoria), e.local].filter(Boolean).join(" · ")}</small></span>
+                  </button>
+                ))}
+                {semana.length > 8 && <button type="button" className="link-btn inicio-mais" onClick={() => ir("agenda")}>Mais {semana.length - 8} na agenda</button>}
+              </div>
+            )}
+          </div>
+
+          <PainelLembretes itens={lembretes} onAbrir={abrirLembrete} />
+        </div>
+
+        <div className="inicio-coluna">
+          <div className="panel">
+            <div className="panel-head alerta"><h3>Atletas em prioridade</h3><span className="muted" style={{ fontSize: 12 }}>{prioridade.length}</span></div>
+            {prioridade.length === 0 ? (
+              <div className="inicio-vazio">Nenhum atleta em prioridade.</div>
+            ) : (
+              <div className="inicio-lista">
+                {prioridade.slice(0, 8).map((d) => (
+                  <button type="button" key={d.id} className="inicio-atleta" onClick={() => onOpenAtleta(d.id)}>
+                    <span className="inicio-avatar">{d.foto ? <img loading="lazy" decoding="async" src={d.foto} alt="" /> : iniciaisAtleta(d)}</span>
+                    <span className="inicio-evento-texto"><b>{nomeExibicao(d)}</b><small>{[d.categoria, d.sinais.map((x) => x.label).join(", ")].filter(Boolean).join(" · ")}</small></span>
+                  </button>
+                ))}
+                {prioridade.length > 8 && <button type="button" className="link-btn inicio-mais" onClick={() => ir("elenco")}>Ver os outros {prioridade.length - 8} no Elenco</button>}
+              </div>
+            )}
+          </div>
+
+          <div className="panel">
+            <div className="panel-head"><h3>Novidades</h3><button type="button" className="pill-btn" onClick={() => ir("atualizacoes")}>Ver todas</button></div>
+            {!novidades ? (
+              <div className="inicio-vazio">Carregando...</div>
+            ) : novidades.length === 0 ? (
+              <div className="inicio-vazio">Nenhuma novidade publicada.</div>
+            ) : (
+              <div className="inicio-lista">
+                {novidades.map((n) => (
+                  <button type="button" key={n.id} className="inicio-novidade" onClick={() => ir("atualizacoes")}>
+                    <small>{formatarDataHoraAtualizacao(n.criadoEm)}</small>
+                    <b>{n.titulo}</b>
+                    {n.descricao && <span>{n.descricao.length > 140 ? n.descricao.slice(0, 140).trim() + "..." : n.descricao}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <div className="panel">
-        <div className="panel-head"><h3>Cruzamento de dados</h3></div>
-        <div className="panel-body" style={{padding:"14px 20px 20px"}}>
-          <CruzamentoDados dados={dados} />
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head"><h3>Dados de psicologia por construto</h3></div>
-        <div className="panel-body" style={{padding:"14px 20px 20px"}}>
-          <DadosPorConstruto dados={dados} />
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head"><h3>Dados de desempenho por estatística</h3></div>
-        <div className="panel-body" style={{padding:"14px 20px 20px"}}>
-          <DadosPorEstatistica dados={dados} />
-        </div>
-      </div>
-
-      <ElencoPorPosicao atletasComSinal={linha} onOpenAtleta={onOpenAtleta} />
     </div>
   );
 }
@@ -3570,11 +3734,6 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
           )}
         </div>
 
-        {!podeGerenciar && (
-          <div className="access-note" style={{margin:"14px 20px 0"}}>
-            <span>Seu perfil pode navegar o elenco, mas só Admin, Treinador, Psicologia, Medicina e Serviço Social podem criar, editar, mesclar ou excluir atletas.</span>
-          </div>
-        )}
 
         {modo === "novo" && podeGerenciar && (
           <FormAtleta atleta={null} onSalvar={salvarNovo} onCancelar={() => setModo(null)} />
@@ -3602,7 +3761,7 @@ function ListaAtletas({ dados, onOpenAtleta, onRecarregar, usuario }) {
                 <tr key={d.id} className="clickable">
                   <td onClick={() => onOpenAtleta(d.id)} style={{width:34}}>
                     <div className="jersey-badge" style={{width:30, height:30, margin:0, fontSize:11, borderRadius:7}}>
-                      {d.foto ? <img className="jersey-foto" src={d.foto} alt="" /> : d.nome.split(" ").map(p => p[0]).slice(0, 2).join("").toUpperCase()}
+                      {d.foto ? <img loading="lazy" decoding="async" className="jersey-foto" src={d.foto} alt="" /> : d.nome.split(" ").map(p => p[0]).slice(0, 2).join("").toUpperCase()}
                     </div>
                   </td>
                   <td style={{fontWeight:600, color:"var(--navy)"}} onClick={() => onOpenAtleta(d.id)}>{nomeExibicao(d)}{d.pendente_vinculo ? " ⚠︎ pendente de vínculo" : ""}</td>
@@ -4096,11 +4255,7 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
     setEnviandoFoto(true);
     setErroFoto(null);
     try {
-      const ext = (arquivo.name.match(/\.[^.]+$/) || [".jpg"])[0];
-      const ref = storage.ref().child(`fotos_atletas/${atletaId}${ext}`);
-      await subirComTimeout(ref, arquivo, 15000);
-      const url = await ref.getDownloadURL();
-      await db.collection(COL_ATLETAS).doc(atletaId).update({ foto: url });
+      await enviarFotoAtleta(atletaId, arquivo);
       onRecarregar();
     } catch (err) {
       setErroFoto((err && err.message) || "Falha ao enviar a foto.");
@@ -4133,7 +4288,7 @@ function PerfilAtleta({ atletaId, onBack, dados, onRecarregar, usuario }) {
           onClick={() => podeEditar && !enviandoFoto && inputFotoRef.current && inputFotoRef.current.click()}
           title={podeEditar ? "Trocar foto" : undefined}
         >
-          {atleta.foto ? <img className="profile-foto" src={atleta.foto} alt="" /> : iniciais}
+          {atleta.foto ? <img loading="lazy" decoding="async" className="profile-foto" src={atleta.foto} alt="" /> : iniciais}
           {podeEditar && <div className="profile-avatar-hint">{enviandoFoto ? "Enviando..." : "Trocar foto"}</div>}
           {podeEditar && (
             <input ref={inputFotoRef} type="file" accept="image/*" style={{display:"none"}} onChange={trocarFoto} />
@@ -4316,7 +4471,6 @@ function FormNovoRegistro({ atletas, tiposSugeridos, chave, onSalvar, onCancelar
         <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
         <button className="pill-btn primary" onClick={handleSubmit} disabled={!nota.trim() || !atletaId || salvando}>{salvando ? "Salvando..." : "Salvar registro"}</button>
       </div>
-      <div className="save-note"><span>Grava direto no Firestore, em atletas/&#123;id&#125;/{SUBCOLS[chave]}.</span></div>
     </div>
   );
 }
@@ -4383,7 +4537,6 @@ function FormNovoRegistroSocial({ atletas, onSalvar, onCancelar }) {
         <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
         <button className="pill-btn primary" onClick={handleSubmit} disabled={!detalhe.trim() || !atletaId || salvando}>{salvando ? "Salvando..." : "Salvar registro"}</button>
       </div>
-      <div className="save-note"><span>Grava direto no Firestore, em atletas/&#123;id&#125;/ct_social_acompanhamento.</span></div>
     </div>
   );
 }
@@ -4625,7 +4778,6 @@ function FormPsicologiaEstruturada({ atletas, onSalvar, onCancelar }) {
         <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
         <button className="pill-btn primary" onClick={handleSubmit} disabled={!atletaId || !camposPreenchidos || salvando}>{salvando ? "Salvando..." : "Salvar avaliação"}</button>
       </div>
-      <div className="save-note"><span>Grava direto no Firestore, em atletas/&#123;id&#125;/{SUBCOLS["psi"]}.</span></div>
     </div>
   );
 }
@@ -4711,7 +4863,6 @@ function FormMedicinaPPE({ atletas, onSalvar, onCancelar }) {
         <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
         <button className="pill-btn primary" onClick={handleSubmit} disabled={!atletaId || !validade || salvando}>{salvando ? "Salvando..." : "Salvar PPE"}</button>
       </div>
-      <div className="save-note"><span>Grava direto no Firestore, em atletas/&#123;id&#125;/{SUBCOLS["medicina"]}.</span></div>
     </div>
   );
 }
@@ -4837,7 +4988,6 @@ function FormMedicinaConcussao({ atletas, onSalvar, onCancelar }) {
         <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
         <button className="pill-btn primary" onClick={handleSubmit} disabled={!atletaId || salvando}>{salvando ? "Salvando..." : "Registrar concussão"}</button>
       </div>
-      <div className="save-note"><span>Grava direto no Firestore, em atletas/&#123;id&#125;/{SUBCOLS["medicina"]}.</span></div>
     </div>
   );
 }
@@ -4985,7 +5135,6 @@ function FormMedicinaCrescimento({ atletas, onSalvar, onCancelar }) {
         <button className="pill-btn" onClick={onCancelar} disabled={salvando}>Cancelar</button>
         <button className="pill-btn primary" onClick={handleSubmit} disabled={!atletaId || !alturaCm || salvando}>{salvando ? "Salvando..." : "Salvar medida"}</button>
       </div>
-      <div className="save-note"><span>Grava direto no Firestore, em atletas/&#123;id&#125;/{SUBCOLS["medicina"]}.</span></div>
     </div>
   );
 }
@@ -5589,11 +5738,7 @@ function ImportadorFotosAtletas({ atletas, onImportado }) {
     const comMatch = linhas.filter((l) => l.atleta);
     for (const linha of comMatch) {
       try {
-        const ext = (linha.file.name.match(/\.[^.]+$/) || [".jpg"])[0];
-        const ref = storage.ref().child(`fotos_atletas/${linha.atleta.id}${ext}`);
-        await subirComTimeout(ref, linha.file, 15000);
-        const url = await ref.getDownloadURL();
-        await db.collection(COL_ATLETAS).doc(linha.atleta.id).update({ foto: url });
+        await enviarFotoAtleta(linha.atleta.id, linha.file);
         enviados++;
         setProgresso(enviados);
       } catch (err) {
@@ -5789,7 +5934,7 @@ function ViewPsicologia() {
         <div className="page-head">
           <div>
             <h1>Psicologia</h1>
-            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC</div>
           </div>
         </div>
 
@@ -5989,7 +6134,7 @@ function ViewFisioterapia({ usuario }) {
         <div className="page-head">
           <div>
             <h1>Fisioterapia</h1>
-            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC</div>
           </div>
         </div>
 
@@ -6140,7 +6285,7 @@ function ViewFisiologia() {
         <div className="page-head">
           <div>
             <h1>Fisiologia</h1>
-            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC</div>
           </div>
         </div>
 
@@ -6259,7 +6404,7 @@ function ViewMedicina() {
         <div className="page-head">
           <div>
             <h1>Medicina</h1>
-            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC</div>
           </div>
         </div>
 
@@ -6456,7 +6601,7 @@ function ViewSocial() {
         <div className="page-head">
           <div>
             <h1>Serviço Social</h1>
-            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC</div>
           </div>
         </div>
 
@@ -6468,9 +6613,6 @@ function ViewSocial() {
           <SkeletonPanel />
         ) : (
           <React.Fragment>
-            <div className="access-note admin">
-              <span><b>Modo Administrador:</b> visualizando o detalhe completo dos acompanhamentos.</span>
-            </div>
             <div className="panel">
               <div className="panel-head">
                 <h3>Acompanhamento social · todos os atletas</h3>
@@ -6540,7 +6682,7 @@ function ViewDesempenho() {
         <div className="page-head">
           <div>
             <h1>Desempenho</h1>
-            <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+            <div className="crumb">MeuCT · Meia Noite EC</div>
           </div>
         </div>
 
@@ -6606,7 +6748,7 @@ function ViewDesempenho() {
   );
 }
 
-function ViewAdmin({ usuario }) {
+function ViewAdmin({ usuario, onNavigate }) {
   const [view, setView] = useState("dashboard");
   const [atletaAberto, abrirAtleta, fecharAtleta] = usePerfilAberto();
   const [dados, setDados] = useState(null);
@@ -6624,7 +6766,7 @@ function ViewAdmin({ usuario }) {
       <div className="page-head">
         <div>
           <h1>{atletaAberto ? "Perfil do atleta" : (view === "dashboard" ? "Painel geral" : "Atletas")}</h1>
-          <div className="crumb">MeuCT · Meia Noite EC · conectado ao Firestore</div>
+          <div className="crumb">MeuCT · Meia Noite EC</div>
         </div>
         {!atletaAberto && dados && (
           <div style={{display:"flex", gap:8}}>
@@ -6641,7 +6783,7 @@ function ViewAdmin({ usuario }) {
       ) : atletaAberto ? (
         <PerfilAtleta atletaId={atletaAberto} onBack={fecharAtleta} dados={dados} onRecarregar={recarregar} usuario={usuario} />
       ) : view === "dashboard" ? (
-        <Dashboard dados={dados} onOpenAtleta={abrirAtleta} />
+        <Dashboard dados={dados} usuario={usuario} onOpenAtleta={abrirAtleta} onNavigate={onNavigate} />
       ) : (
         <ListaAtletas dados={dados} onOpenAtleta={abrirAtleta} onRecarregar={recarregar} usuario={usuario} />
       )}
@@ -6791,7 +6933,7 @@ function PainelUsuarios({ usuarioAtual }) {
       <div className="page-head">
         <div>
           <h1>Usuários</h1>
-          <div className="crumb">MeuCT · Meia Noite EC · controle de acesso por módulo. Use os botões de grupo (Campo, Departamento Médico, Social) pra liberar o pacote padrão de uma vez, ou ajuste módulo a módulo</div>
+          <div className="crumb">MeuCT · Meia Noite EC · quem acessa cada área</div>
         </div>
       </div>
 
@@ -8173,6 +8315,7 @@ function atletasComDadosNoPeriodo(registros, atletasCandidatos, filtros) {
 
 function CentralRelatorios({ usuario }) {
   const { useState, useEffect, useRef } = React;
+  useBibliotecas("pdf", "zip");
   const modulosPermitidos = MODULOS_RELATORIO.filter((m) => temPermissao(usuario, m));
   const [moduloId, setModuloId] = useState(modulosPermitidos[0] || "");
   const [modo, setModo] = useState("individual"); // "individual" | "grupo"
@@ -8256,6 +8399,7 @@ function CentralRelatorios({ usuario }) {
       await new Promise((res) => setTimeout(res, 30)); // deixa o botão mostrar "Preparando PDF..."
       const usados = conteudo.filtrosUsados || filtrosAtuais;
       const sujeito = usados.atletaId ? nomeAtleta(atletas, usados.atletaId) : (rotuloCategoria(usados.categoria) || "Todos");
+      await carregarBiblioteca("pdf");
       baixarRelatorioPDF(documento, nomeArquivoRelatorio(config.label, sujeito));
     } catch (e) {
       setErro("Não foi possível gerar o PDF: " + (e && e.message ? e.message : e));
@@ -8295,6 +8439,7 @@ function CentralRelatorios({ usuario }) {
       const listaAtletas = atletas || await carregarAtletas();
       if (!atletas) setAtletas(listaAtletas);
       const registros = await carregarTodosRegistros(config.subcol);
+      await Promise.all([carregarBiblioteca("pdf"), saida === "zip" ? carregarBiblioteca("zip") : null]);
       const filtrosBase = { tipoPeriodo, dataDia, dataInicio, dataFim, categoria, status };
       const zip = saida === "zip" ? new JSZip() : null;
       const pdfCombinado = saida === "combinado" ? novoDocPdf() : null;
@@ -8984,7 +9129,7 @@ function CampoConvocacao({ atletas, selecao, onToggle, onOpen, extras, titulo, s
       <button key={d.id} type="button" className={classe} title={dica} aria-label={dica} aria-pressed={modoSelecao ? !!estado : undefined}
         onClick={() => (modoSelecao ? onToggle(d.id) : onOpen && onOpen(d.id))}>
         <span className="jogador-foto">
-          {d.foto ? <img src={d.foto} alt="" /> : iniciaisAtleta(d)}
+          {d.foto ? <img loading="lazy" decoding="async" src={d.foto} alt="" /> : iniciaisAtleta(d)}
           {sinal && <span className={"jogador-sinal " + sinal}></span>}
           {estado && <span className={"jogador-selo " + estado}>{estado === "titular" ? "T" : "R"}</span>}
         </span>
@@ -9030,7 +9175,7 @@ function CampoConvocacao({ atletas, selecao, onToggle, onOpen, extras, titulo, s
                   const estado = selecao ? selecao[d.id] || null : null;
                   return (
                     <button key={d.id} type="button" className={"banco-jogador" + (estado ? " convocado " + estado : "")} onClick={() => (modoSelecao ? onToggle(d.id) : onOpen && onOpen(d.id))} title={d.nome}>
-                      <span className="mini">{d.foto ? <img src={d.foto} alt="" /> : iniciaisAtleta(d)}</span>
+                      <span className="mini">{d.foto ? <img loading="lazy" decoding="async" src={d.foto} alt="" /> : iniciaisAtleta(d)}</span>
                       {nomeCurtoAtleta(d)}{estado ? (estado === "titular" ? " · T" : " · R") : ""}
                     </button>
                   );
@@ -9136,7 +9281,7 @@ function BuscaRapida({ usuario, aberta, onFechar, onNavigate }) {
                 <button type="button" role="option" aria-selected={i === idxAtivo} className={"busca-item" + (i === idxAtivo ? " ativo" : "")} onMouseEnter={() => setAtivo(i)} onClick={() => escolher(it)}>
                   {it.tipo === "atleta" ? (
                     <React.Fragment>
-                      <span className="busca-avatar">{it.atleta.foto ? <img src={it.atleta.foto} alt="" /> : iniciaisAtleta(it.atleta)}</span>
+                      <span className="busca-avatar">{it.atleta.foto ? <img loading="lazy" decoding="async" src={it.atleta.foto} alt="" /> : iniciaisAtleta(it.atleta)}</span>
                       <span className="busca-texto">
                         <b>{nomeExibicao(it.atleta)}</b>
                         <small>{[it.atleta.apelido ? it.atleta.nome : "", it.atleta.categoria, it.atleta.posicao].filter(Boolean).join(" · ")}</small>
@@ -9473,7 +9618,13 @@ function EscudoTime({ nome }) {
 }
 
 /** Relação de convocados em PDF, no mesmo padrão visual dos relatórios. */
-function baixarConvocacaoPdf(evento, titulares, reservas, usuario) {
+async function baixarConvocacaoPdf(evento, titulares, reservas, usuario) {
+  try {
+    await carregarBiblioteca("pdf");
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
   const doc = novoDocPdf();
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -9527,6 +9678,7 @@ function baixarConvocacaoPdf(evento, titulares, reservas, usuario) {
 
 function EditorConvocacao({ evento, atletas, usuario, onVoltar, onSalvo }) {
   const { useState } = React;
+  useBibliotecas("pdf");
   const categoriasDoJogo = evento.categoria === "ambas" ? ["sub15", "sub17"] : [evento.categoria || "sub15"];
   const [timeAtivo, setTimeAtivo] = useState(categoriasDoJogo[0]);
   const [selecao, setSelecao] = useState(() => {
@@ -9798,7 +9950,7 @@ function CentralDoJogo({ jogo, dados, eventoAgenda, onVoltar, onAbrirAtleta }) {
                   {top.length === 0 ? <div className="muted" style={{ fontSize: 12.5 }}>Ninguém registrou.</div> : top.map((j, i) => (
                     <button type="button" className="destaque-linha" key={j.id} onClick={() => onAbrirAtleta(j.id)} title={"Abrir o perfil de " + j.nome}>
                       <span className="destaque-pos">{i + 1}</span>
-                      <span className="destaque-avatar">{j.foto ? <img src={j.foto} alt="" /> : iniciaisAtleta(j)}</span>
+                      <span className="destaque-avatar">{j.foto ? <img loading="lazy" decoding="async" src={j.foto} alt="" /> : iniciaisAtleta(j)}</span>
                       <span className="destaque-nome">{nomeCurtoAtleta(j)}</span>
                       <span className="destaque-barra"><i style={{ width: Math.max(8, (j.campos[k] / max) * 100) + "%" }}></i></span>
                       <b>{j.campos[k]}</b>
@@ -10029,6 +10181,7 @@ function precisaoPasse(totais) {
 
 /* ---------- Monitoramento: bem-estar, carga, maturação e links de check-in ---------- */
 function QrCode({ texto, tamanho }) {
+  const qrPronto = useBibliotecas("qr") || !!window.qrcode;
   const svg = React.useMemo(() => {
     if (!window.qrcode) return null;
     try {
@@ -10039,8 +10192,9 @@ function QrCode({ texto, tamanho }) {
     } catch (e) {
       return null;
     }
-  }, [texto]);
+  }, [texto, qrPronto]);
   const estilo = { width: tamanho || 120, height: tamanho || 120 };
+  if (!svg && !qrPronto) return <div className="qr" style={estilo} aria-label="Carregando QR code" />;
   if (!svg) return <div className="qr qr-falhou" style={estilo}>QR indisponível</div>;
   return <div className="qr" style={estilo} role="img" aria-label="QR code do link de check-in" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
@@ -10496,6 +10650,7 @@ function TabLinks({ atletas, links, onRecarregar }) {
 
 function ViewMonitoramento({ usuario }) {
   const { useState, useEffect } = React;
+  useBibliotecas("qr");
   const hoje = hojeISO();
   const podeLinks = podeGerirCheckin(usuario);
   const [dados, setDados] = useState(null);
@@ -10809,7 +10964,7 @@ function AppLogado({ usuario }) {
   const paginasComponente = {
     elenco: <ViewElenco usuario={usuario} />,
     atualizacoes: <PainelAtualizacoes usuario={usuario} />,
-    admin: <ViewAdmin usuario={usuario} />,
+    admin: <ViewAdmin usuario={usuario} onNavigate={navegar} />,
     psicologia: <ViewPsicologia />,
     fisioterapia: <ViewFisioterapia usuario={usuario} />,
     fisiologia: <ViewFisiologia />,
