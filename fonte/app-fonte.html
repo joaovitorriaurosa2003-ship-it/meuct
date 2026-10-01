@@ -3327,6 +3327,8 @@ function Dashboard({ dados, usuario, onOpenAtleta, onNavigate }) {
         <div className="kpi-card acento-vermelho"><div className="label">Prioridade</div><div className="value vermelho">{contagem.vermelho}</div></div>
       </div>
 
+      <ElencoPorPosicao atletasComSinal={linha} onOpenAtleta={onOpenAtleta} />
+
       <div className="inicio-grid">
         <div className="inicio-coluna">
           <div className="panel">
